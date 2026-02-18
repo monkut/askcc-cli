@@ -42,6 +42,12 @@ askcc [--cwd DIR] {plan,develop} --github-issue-url URL
 | `--cwd`              | Working directory for the Claude subprocess (default: cwd) |
 | `--version`          | Show version                                             |
 
+### Environment Variables
+
+| Variable    | Description                                | Default |
+|-------------|--------------------------------------------|---------|
+| `LOG_LEVEL` | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, etc.) | `INFO`  |
+
 ### Examples
 
 Plan an issue:

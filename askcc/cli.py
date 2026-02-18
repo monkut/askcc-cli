@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import subprocess
 import sys
 from pathlib import Path
@@ -8,6 +9,8 @@ from . import __version__
 from .definitions import AGENT_CONFIGS, AgentType
 from .functions import fetch_github_issue
 from .settings import configure_logging
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_PERMISSION_MODE = "acceptEdits"
 
@@ -28,12 +31,14 @@ def _run_claude(prompt: str, agent: AgentType = AgentType.PLAN, *, cwd: Path | N
         json.dumps(agent_definition),
     ]
 
+    logger.info("Requesting '%s' from Claude Code ...", agent.value)
     result = subprocess.run(  # noqa: S603
         cmd,
         text=True,
         check=False,
         cwd=cwd,
     )
+    logger.info("Claude Code finished (exit code: %d)", result.returncode)
     return result.returncode
 
 
@@ -67,6 +72,7 @@ def main() -> None:
     config = AGENT_CONFIGS[agent]
     issue_content = fetch_github_issue(args.github_issue_url)
     prompt = config.user_prompt_template.format(issue_content=issue_content)
+    logger.info("Prompt prepared for '%s' command", agent.value)
     return_code = _run_claude(prompt, agent=agent, cwd=args.cwd)
 
     sys.exit(return_code)

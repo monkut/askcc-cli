@@ -36,6 +36,7 @@ def fetch_github_issue(github_issue_url: str) -> str:
     gh = _require_gh_cli()
     owner, repo, issue_number = _parse_issue_url(github_issue_url)
     repo_nwo = f"{owner}/{repo}"
+    logger.info("Fetching issue #%d from %s ...", issue_number, repo_nwo)
 
     # Fetch issue body
     issue_result = subprocess.run(  # noqa: S603
@@ -46,7 +47,7 @@ def fetch_github_issue(github_issue_url: str) -> str:
     )
     issue_text = issue_result.stdout.strip()
 
-    # Fetch all comments
+    logger.info("Fetching comments for issue #%d ...", issue_number)
     comments_result = subprocess.run(  # noqa: S603
         [gh, "api", "--paginate", f"repos/{repo_nwo}/issues/{issue_number}/comments"],
         capture_output=True,
@@ -59,5 +60,6 @@ def fetch_github_issue(github_issue_url: str) -> str:
     sections = [f"Issue #{issue_number}:\n{issue_text}"]
     if comment_texts:
         sections.append("Comments:\n" + "\n---\n".join(comment_texts))
+    logger.info("Fetched issue with %d comment(s)", len(comment_texts))
 
     return "\n\n".join(sections)

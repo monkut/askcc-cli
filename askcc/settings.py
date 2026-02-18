@@ -2,7 +2,7 @@ import logging
 import os
 import sys
 
-DEFAULT_LOG_LEVEL = "DEBUG"
+DEFAULT_LOG_LEVEL = "INFO"
 LOG_LEVEL = os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
 
 

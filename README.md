@@ -18,7 +18,7 @@ uv tool install . --python 3.14
 Or install directly from GitHub:
 
 ```bash
-uv tool install git+https://github.com/monkut/askcc-cli.git --python 3.14
+uv tool install "askcc @ https://github.com/monkut/askcc-cli/archive/refs/tags/$(gh release view --repo monkut/askcc-cli --json tagName -q .tagName).tar.gz" --python 3.14
 ```
 
 Or run directly with `uvx`:

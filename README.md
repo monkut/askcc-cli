@@ -15,6 +15,12 @@ A one-shot Claude Code CLI executor that fetches a GitHub issue and pipes it to 
 uv tool install . --python 3.14
 ```
 
+Or install directly from GitHub:
+
+```bash
+uv tool install git+https://github.com/monkut/askcc-cli.git --python 3.14
+```
+
 Or run directly with `uvx`:
 
 ```bash
@@ -46,7 +52,23 @@ askcc [--cwd DIR] {plan,develop} --github-issue-url URL
 
 | Variable    | Description                                | Default |
 |-------------|--------------------------------------------|---------|
-| `LOG_LEVEL` | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, etc.) | `INFO`  |
+| `LOG_LEVEL`  | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, etc.) | `INFO`    |
+| `ASKCC_HOME` | Root directory for askcc configuration and templates   | `~/.askcc` |
+
+### Customizing Prompts
+
+On first run, askcc creates `~/.askcc/templates/` with four default template files:
+
+| File                 | Description                          |
+|----------------------|--------------------------------------|
+| `plan_system.txt`    | System prompt for the planning agent |
+| `plan_user.txt`      | User prompt template for planning    |
+| `develop_system.txt` | System prompt for the dev agent      |
+| `develop_user.txt`   | User prompt template for development |
+
+Edit any file to customize the agent's behavior. User prompt templates support the `$issue_content` variable, which is replaced with the fetched GitHub issue at runtime.
+
+Override the config directory by setting the `ASKCC_HOME` environment variable (e.g. for testing).
 
 ### Examples
 

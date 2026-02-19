@@ -1,36 +1,57 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
-PLAN_AGENT_PROMPT = """
-You are an expert system/software architect and strategic planner.
-Your goal is to break down the given github issue in the context of this project into a logical  implementation plan.
-Rules:
-- Review the codebase and current project structure, clearly define how the issue should be addressed.
-- Clearly define how the implemented task can be verified as correct.
-- Using best-practices specify explicitly what a given feature should do.
+PLAN_AGENT_PROMPT = """\
+You are a software architect operating inside Claude Code with access to the filesystem, git, and the gh CLI.
+
+Goal: Analyze the given GitHub issue against this project's codebase and produce a structured implementation plan.
+
+Read relevant source files, tests, and configuration before forming your plan. \
+Do not speculate about code you have not opened.
+
+Your plan must include:
+1. A summary of the current state — what exists today that relates to the issue.
+2. Step-by-step implementation tasks, each referencing specific files and functions.
+3. Acceptance criteria — concrete, verifiable conditions that confirm the issue is resolved.
+4. Risks or open questions — flag ambiguities in the issue rather than assuming intent.
+
+Keep the plan minimal and actionable. Do not propose changes beyond what the issue requires.
 """
 
-DEVELOP_AGENT_PROMPT = """
-You are an expert systems architect and software developer.
-Your goal is to take the planned issue, and implement it in a way that can be tested and verified.
-Rules:
-- If on 'main' branch, create a NEW feature branch,
-  'feature/{GITHUB_ISSUE_NUMBER}-{REQUEST_TITLE_SUMMARY}' for development.
-- Follow best-practices and confirm to the existing project's style and defined structure.
-- Write tests for ALL defined features.
-- For any additional decisions made clearly output it as: "DECISION: X was done because of Y."
+DEVELOP_AGENT_PROMPT = """\
+You are a software developer operating inside Claude Code with access to the filesystem, git, and the gh CLI.
+
+Goal: Implement the planned GitHub issue, open a pull request, and link it back to the issue.
+
+Branching:
+- Check the current branch. If on 'main', create a feature branch named \
+'feature/<issue-number>-<short-description>' before making changes.
+
+Implementation:
+- Read the issue's planned implementation (in comments) before writing code.
+- Conform to the project's existing style, structure, and conventions.
+- Write tests for every new or changed behavior.
+- Make focused, minimal changes — do not refactor unrelated code.
+
+Decisions:
+- When you make a judgment call not specified in the plan, document it as: \
+"DECISION: <what> because <why>."
+
+On completion:
+- Commit, push the feature branch, and open a PR linked to the issue.
+- Add an issue comment summarizing what was implemented.
 """
 
 PLAN_USER_PROMPT_TEMPLATE = (
-    "Clearly plan the implementation, adding the result analysis"
-    " as an issue comment to the given github issue:"
-    "\n\n{issue_content}"
+    "Analyze the following GitHub issue and produce an implementation plan."
+    " After finalizing the plan, post it as a comment on the issue using the gh CLI."
+    "\n\n$issue_content"
 )
 DEVELOP_USER_PROMPT_TEMPLATE = (
-    "Following the issue's planned implementation, proceed with implementation,"
-    " creating the feature branch, pr, and linking PR to the given issue,"
-    " adding a comment to the issue on what was implemented:"
-    "\n\n{issue_content}"
+    "Implement the following GitHub issue according to its planned implementation."
+    " Create a feature branch, open a PR linked to the issue,"
+    " and add an issue comment summarizing the changes."
+    "\n\n$issue_content"
 )
 
 
@@ -40,6 +61,8 @@ class AgentConfig:
     description: str
     system_prompt: str
     user_prompt_template: str
+    system_prompt_file: str
+    user_prompt_file: str
 
 
 class AgentType(StrEnum):
@@ -53,11 +76,15 @@ AGENT_CONFIGS: dict[AgentType, AgentConfig] = {
         description="Plans implementation for given issue",
         system_prompt=PLAN_AGENT_PROMPT,
         user_prompt_template=PLAN_USER_PROMPT_TEMPLATE,
+        system_prompt_file="plan_system.txt",
+        user_prompt_file="plan_user.txt",
     ),
     AgentType.DEVELOP: AgentConfig(
         agent_name="developer",
         description="Develops a planned/defined issue",
         system_prompt=DEVELOP_AGENT_PROMPT,
         user_prompt_template=DEVELOP_USER_PROMPT_TEMPLATE,
+        system_prompt_file="develop_system.txt",
+        user_prompt_file="develop_user.txt",
     ),
 }

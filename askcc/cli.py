@@ -4,10 +4,11 @@ import logging
 import subprocess
 import sys
 from pathlib import Path
+from string import Template
 
 from . import __version__
-from .definitions import AGENT_CONFIGS, AgentType
-from .functions import fetch_github_issue
+from .definitions import AgentConfig, AgentType
+from .functions import bootstrap_templates, fetch_github_issue, load_agent_config
 from .settings import configure_logging
 
 logger = logging.getLogger(__name__)
@@ -15,9 +16,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_PERMISSION_MODE = "acceptEdits"
 
 
-def _run_claude(prompt: str, agent: AgentType = AgentType.PLAN, *, cwd: Path | None = None) -> int:
+def _run_claude(prompt: str, config: AgentConfig, *, cwd: Path | None = None) -> int:
     """Run claude CLI with the given prompt, streaming output to stdout/stderr."""
-    config = AGENT_CONFIGS[agent]
     agent_definition = {config.agent_name: {"description": config.description, "prompt": config.system_prompt}}
 
     cmd = [
@@ -31,7 +31,7 @@ def _run_claude(prompt: str, agent: AgentType = AgentType.PLAN, *, cwd: Path | N
         json.dumps(agent_definition),
     ]
 
-    logger.info("Requesting '%s' from Claude Code ...", agent.value)
+    logger.info("Requesting '%s' from Claude Code ...", config.agent_name)
     result = subprocess.run(  # noqa: S603
         cmd,
         text=True,
@@ -44,6 +44,8 @@ def _run_claude(prompt: str, agent: AgentType = AgentType.PLAN, *, cwd: Path | N
 
 def main() -> None:
     configure_logging()
+    bootstrap_templates()
+
     parser = argparse.ArgumentParser(description="A one-shot Claude Code CLI executor.")
     parser.add_argument(
         "--version",
@@ -69,11 +71,11 @@ def main() -> None:
     args = parser.parse_args()
 
     agent = AgentType(args.command)
-    config = AGENT_CONFIGS[agent]
+    config = load_agent_config(agent)
     issue_content = fetch_github_issue(args.github_issue_url)
-    prompt = config.user_prompt_template.format(issue_content=issue_content)
+    prompt = Template(config.user_prompt_template).safe_substitute(issue_content=issue_content)
     logger.info("Prompt prepared for '%s' command", agent.value)
-    return_code = _run_claude(prompt, agent=agent, cwd=args.cwd)
+    return_code = _run_claude(prompt, config=config, cwd=args.cwd)
 
     sys.exit(return_code)
 

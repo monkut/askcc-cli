@@ -63,6 +63,7 @@ class AgentConfig:
     user_prompt_template: str
     system_prompt_file: str
     user_prompt_file: str
+    required_variables: tuple[str, ...] = ()
 
 
 class AgentType(StrEnum):
@@ -76,15 +77,17 @@ AGENT_CONFIGS: dict[AgentType, AgentConfig] = {
         description="Plans implementation for given issue",
         system_prompt=PLAN_AGENT_PROMPT,
         user_prompt_template=PLAN_USER_PROMPT_TEMPLATE,
-        system_prompt_file="plan_system.txt",
-        user_prompt_file="plan_user.txt",
+        system_prompt_file="PLAN_SYSTEM_PROMPT.md",
+        user_prompt_file="PLAN_USER_PROMPT.md",
+        required_variables=("issue_content",),
     ),
     AgentType.DEVELOP: AgentConfig(
         agent_name="developer",
         description="Develops a planned/defined issue",
         system_prompt=DEVELOP_AGENT_PROMPT,
         user_prompt_template=DEVELOP_USER_PROMPT_TEMPLATE,
-        system_prompt_file="develop_system.txt",
-        user_prompt_file="develop_user.txt",
+        system_prompt_file="DEVELOP_SYSTEM_PROMPT.md",
+        user_prompt_file="DEVELOP_USER_PROMPT.md",
+        required_variables=("issue_content",),
     ),
 }

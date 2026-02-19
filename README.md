@@ -59,14 +59,14 @@ askcc [--cwd DIR] {plan,develop} --github-issue-url URL
 
 On first run, askcc creates `~/.askcc/templates/` with four default template files:
 
-| File                 | Description                          |
-|----------------------|--------------------------------------|
-| `plan_system.txt`    | System prompt for the planning agent |
-| `plan_user.txt`      | User prompt template for planning    |
-| `develop_system.txt` | System prompt for the dev agent      |
-| `develop_user.txt`   | User prompt template for development |
+| File                       | Required variables | Description                          |
+|----------------------------|--------------------|--------------------------------------|
+| `PLAN_SYSTEM_PROMPT.md`    | —                  | System prompt for the planning agent |
+| `PLAN_USER_PROMPT.md`      | `$issue_content`   | User prompt template for planning    |
+| `DEVELOP_SYSTEM_PROMPT.md` | —                  | System prompt for the dev agent      |
+| `DEVELOP_USER_PROMPT.md`   | `$issue_content`   | User prompt template for development |
 
-Edit any file to customize the agent's behavior. User prompt templates support the `$issue_content` variable, which is replaced with the fetched GitHub issue at runtime.
+Edit any file to customize the agent's behavior. User prompt templates **must** contain the `$issue_content` variable, which is replaced with the fetched GitHub issue at runtime. askcc validates this on startup and raises an error if a required variable is missing.
 
 Override the config directory by setting the `ASKCC_HOME` environment variable (e.g. for testing).
 

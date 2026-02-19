@@ -6,7 +6,7 @@ from pathlib import Path
 DEFAULT_LOG_LEVEL = "INFO"
 LOG_LEVEL = os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
 
-ASKCC_HOME: Path = Path(os.getenv("ASKCC_HOME", str(Path.home() / ".askcc")))
+ASKCC_HOME: Path = Path(os.getenv("ASKCC_HOME") or str(Path.home() / ".askcc")).expanduser().resolve()
 TEMPLATES_DIR: Path = ASKCC_HOME / "templates"
 
 

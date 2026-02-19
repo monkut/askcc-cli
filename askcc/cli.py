@@ -44,8 +44,6 @@ def _run_claude(prompt: str, config: AgentConfig, *, cwd: Path | None = None) ->
 
 def main() -> None:
     configure_logging()
-    bootstrap_templates()
-
     parser = argparse.ArgumentParser(description="A one-shot Claude Code CLI executor.")
     parser.add_argument(
         "--version",
@@ -69,6 +67,7 @@ def main() -> None:
     develop_parser.add_argument("--github-issue-url", required=True, help="GitHub issue URL to develop.")
 
     args = parser.parse_args()
+    bootstrap_templates()
 
     agent = AgentType(args.command)
     config = load_agent_config(agent)

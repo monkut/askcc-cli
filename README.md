@@ -81,6 +81,12 @@ Plan an issue:
 askcc plan --github-issue-url https://github.com/monkut/askcc-cli/issues/1
 ```
 
+Review an issue for quality and completeness:
+
+```bash
+askcc review --github-issue-url https://github.com/monkut/askcc-cli/issues/1
+```
+
 Develop an issue in a specific project directory:
 
 ```bash

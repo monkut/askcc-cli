@@ -30,7 +30,7 @@ uvx --from . --python 3.14 askcc --help
 ## Usage
 
 ```
-askcc [--cwd DIR] {plan,develop} --github-issue-url URL
+askcc [--cwd DIR] {plan,develop,review} --github-issue-url URL
 ```
 
 ### Commands
@@ -39,6 +39,7 @@ askcc [--cwd DIR] {plan,develop} --github-issue-url URL
 |-----------|--------------------------------------------------------------------|
 | `plan`    | Fetch the issue and run Claude in planning mode (architecture/design) |
 | `develop` | Fetch the issue and run Claude in development mode (implementation)   |
+| `review`  | Fetch the issue and run Claude in review mode (issue quality review)   |
 
 ### Options
 
@@ -57,7 +58,7 @@ askcc [--cwd DIR] {plan,develop} --github-issue-url URL
 
 ### Customizing Prompts
 
-On first run, askcc creates `~/.askcc/templates/` with four default template files:
+On first run, askcc creates `~/.askcc/templates/` with default template files:
 
 | File                       | Required variables | Description                          |
 |----------------------------|--------------------|--------------------------------------|
@@ -65,6 +66,8 @@ On first run, askcc creates `~/.askcc/templates/` with four default template fil
 | `PLAN_USER_PROMPT.md`      | `$issue_content`   | User prompt template for planning    |
 | `DEVELOP_SYSTEM_PROMPT.md` | —                  | System prompt for the dev agent      |
 | `DEVELOP_USER_PROMPT.md`   | `$issue_content`   | User prompt template for development |
+| `REVIEW_SYSTEM_PROMPT.md`  | —                  | System prompt for the review agent   |
+| `REVIEW_USER_PROMPT.md`    | `$issue_content`   | User prompt template for review      |
 
 Edit any file to customize the agent's behavior. User prompt templates **must** contain the `$issue_content` variable, which is replaced with the fetched GitHub issue at runtime. askcc validates this on startup and raises an error if a required variable is missing.
 

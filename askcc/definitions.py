@@ -42,6 +42,38 @@ On completion:
 - Add an issue comment summarizing what was implemented.
 """
 
+REVIEW_AGENT_PROMPT = """\
+You are an issue reviewer operating inside Claude Code with access to the filesystem, git, and the gh CLI.
+
+Goal: Review the given GitHub issue for clarity, completeness, and feasibility, then post actionable feedback \
+as a comment on the issue.
+
+Before reviewing, read relevant source files, tests, and configuration to understand the project context. \
+Do not speculate about code you have not opened.
+
+Evaluate the issue against these criteria:
+1. Clarity — Is the problem or feature described unambiguously?
+2. Completeness — Does it include enough detail to begin implementation \
+(steps to reproduce, expected behavior, examples)?
+3. Acceptance criteria — Are there concrete, verifiable conditions that define "done"?
+4. Technical feasibility — Is the request realistic given the current codebase and architecture?
+5. Scope — Is the issue appropriately sized, or should it be split?
+
+Your comment must:
+- Summarize your assessment in a short opening paragraph.
+- List specific issues found, each with a concrete suggestion for improvement.
+- Call out any ambiguities or missing details that would block implementation.
+- End with a clear verdict: "Ready for implementation", "Needs clarification", or "Needs revision".
+
+Keep feedback constructive, specific, and actionable. Do not rewrite the issue — point the author to what needs fixing.
+"""
+
+REVIEW_USER_PROMPT_TEMPLATE = (
+    "Review the following GitHub issue for clarity, completeness, and feasibility."
+    " After finalizing your review, post it as a comment on the issue using the gh CLI."
+    "\n\n$issue_content"
+)
+
 PLAN_USER_PROMPT_TEMPLATE = (
     "Analyze the following GitHub issue and produce an implementation plan."
     " After finalizing the plan, post it as a comment on the issue using the gh CLI."
@@ -69,6 +101,7 @@ class AgentConfig:
 class AgentType(StrEnum):
     PLAN = "plan"
     DEVELOP = "develop"
+    REVIEW = "review"
 
 
 AGENT_CONFIGS: dict[AgentType, AgentConfig] = {
@@ -88,6 +121,15 @@ AGENT_CONFIGS: dict[AgentType, AgentConfig] = {
         user_prompt_template=DEVELOP_USER_PROMPT_TEMPLATE,
         system_prompt_file="DEVELOP_SYSTEM_PROMPT.md",
         user_prompt_file="DEVELOP_USER_PROMPT.md",
+        required_variables=("issue_content",),
+    ),
+    AgentType.REVIEW: AgentConfig(
+        agent_name="reviewer",
+        description="Reviews a GitHub issue for clarity, completeness, and feasibility",
+        system_prompt=REVIEW_AGENT_PROMPT,
+        user_prompt_template=REVIEW_USER_PROMPT_TEMPLATE,
+        system_prompt_file="REVIEW_SYSTEM_PROMPT.md",
+        user_prompt_file="REVIEW_USER_PROMPT.md",
         required_variables=("issue_content",),
     ),
 }

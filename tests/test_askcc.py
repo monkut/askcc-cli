@@ -45,6 +45,8 @@ EXPECTED_TEMPLATE_FILES = {
     "PLAN_USER_PROMPT.md",
     "DEVELOP_SYSTEM_PROMPT.md",
     "DEVELOP_USER_PROMPT.md",
+    "REVIEW_SYSTEM_PROMPT.md",
+    "REVIEW_USER_PROMPT.md",
 }
 
 
@@ -152,6 +154,15 @@ class TestLoadAgentConfig:
         config = load_agent_config(AgentType.DEVELOP)
         assert config.agent_name == "developer"
         assert config.description == "Develops a planned/defined issue"
+
+    def test_load_review_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        templates_dir = tmp_path / "templates"
+        monkeypatch.setattr("askcc.functions.TEMPLATES_DIR", templates_dir)
+        bootstrap_templates()
+
+        config = load_agent_config(AgentType.REVIEW)
+        assert config.agent_name == "reviewer"
+        assert config.description == "Reviews a GitHub issue for clarity, completeness, and feasibility"
 
     def test_raises_on_missing_required_variable(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         templates_dir = tmp_path / "templates"

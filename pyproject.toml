@@ -1,6 +1,6 @@
 [project]
 name = "askcc"
-version = "0.1.0"
+version = "0.1.1"
 description = "A one-shot cc cli executor"
 authors = [{ name = "mknt", email = "shane.cousins@gmail.com" }]
 readme = "README.md"

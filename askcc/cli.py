@@ -66,6 +66,9 @@ def main() -> None:
     develop_parser = subparsers.add_parser("develop", help="Run Claude in development mode.")
     develop_parser.add_argument("--github-issue-url", required=True, help="GitHub issue URL to develop.")
 
+    review_parser = subparsers.add_parser("review", help="Run Claude in review mode (issue quality review).")
+    review_parser.add_argument("--github-issue-url", required=True, help="GitHub issue URL to review.")
+
     args = parser.parse_args()
     bootstrap_templates()
 

@@ -2,7 +2,12 @@ import json
 import logging
 import shutil
 import subprocess
+from dataclasses import replace
+from string import Template
 from urllib.parse import urlparse
+
+from .definitions import AGENT_CONFIGS, AgentConfig, AgentType
+from .settings import TEMPLATES_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -63,3 +68,54 @@ def fetch_github_issue(github_issue_url: str) -> str:
     logger.info("Fetched issue with %d comment(s)", len(comment_texts))
 
     return "\n\n".join(sections)
+
+
+def bootstrap_templates() -> None:
+    """Create TEMPLATES_DIR with default template files if they are missing."""
+    TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
+    created_any = False
+    for config in AGENT_CONFIGS.values():
+        for path, content in (
+            (TEMPLATES_DIR / config.system_prompt_file, config.system_prompt),
+            (TEMPLATES_DIR / config.user_prompt_file, config.user_prompt_template),
+        ):
+            if not path.exists():
+                path.write_text(content)
+                created_any = True
+    if created_any:
+        logger.info("Created default templates in %s", TEMPLATES_DIR)
+
+
+def load_template(file_name: str, default: str) -> str:
+    """Read a template file from TEMPLATES_DIR, falling back to the default on missing file."""
+    path = TEMPLATES_DIR / file_name
+    try:
+        return path.read_text()
+    except FileNotFoundError:
+        logger.warning("Template file not found: %s — using built-in default", path)
+        return default
+
+
+def validate_template(template_text: str, required_variables: tuple[str, ...], file_name: str) -> None:
+    """Validate that a template contains all required $variables."""
+    # Template identifiers are words preceded by $ (or ${...})
+    # We check by attempting substitution with sentinel values
+    tpl = Template(template_text)
+    for var in required_variables:
+        sentinel = f"__SENTINEL_{var}__"
+        result = tpl.safe_substitute({var: sentinel})
+        if sentinel not in result:
+            msg = f"Template '{file_name}' is missing required variable '${var}'"
+            raise ValueError(msg)
+
+
+def load_agent_config(agent: AgentType) -> AgentConfig:
+    """Load an AgentConfig with templates read from disk, falling back to built-in defaults."""
+    base = AGENT_CONFIGS[agent]
+    user_prompt_template = load_template(base.user_prompt_file, base.user_prompt_template)
+    validate_template(user_prompt_template, base.required_variables, base.user_prompt_file)
+    return replace(
+        base,
+        system_prompt=load_template(base.system_prompt_file, base.system_prompt),
+        user_prompt_template=user_prompt_template,
+    )

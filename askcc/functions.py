@@ -98,12 +98,11 @@ def install_skills(directory: Path | None = None) -> None:
 def _register_skill(skill_name: str) -> None:
     """Add a skill entry to ~/.openclaw/openclaw.json."""
     config_path = OPENCLAW_CONFIG_PATH
-    config_path.parent.mkdir(parents=True, exist_ok=True)
+    if not config_path.exists():
+        msg = f"{config_path} not found, could not install"
+        raise ValueError(msg)
 
-    if config_path.exists():
-        config = json.loads(config_path.read_text())
-    else:
-        config = {}
+    config = json.loads(config_path.read_text())
 
     skills = config.setdefault("skills", {})
     entries = skills.setdefault("entries", {})

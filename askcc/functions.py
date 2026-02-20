@@ -3,6 +3,8 @@ import logging
 import shutil
 import subprocess
 from dataclasses import replace
+from importlib.resources import files as package_files
+from pathlib import Path
 from string import Template
 from urllib.parse import urlparse
 
@@ -68,6 +70,47 @@ def fetch_github_issue(github_issue_url: str) -> str:
     logger.info("Fetched issue with %d comment(s)", len(comment_texts))
 
     return "\n\n".join(sections)
+
+
+DEFAULT_SKILLS_DIR = Path.home() / ".openclaw" / "workspace" / "skills"
+OPENCLAW_CONFIG_PATH = Path.home() / ".openclaw" / "openclaw.json"
+
+
+def install_skills(directory: Path | None = None) -> None:
+    """Copy bundled skills to the target directory and register them in openclaw.json."""
+    target_dir = directory or DEFAULT_SKILLS_DIR
+    skills_source = package_files("askcc") / "skills"
+
+    # Copy each skill directory
+    for skill_dir in sorted(skills_source.iterdir(), key=lambda p: p.name):
+        if not skill_dir.is_dir() or skill_dir.name.startswith("__"):
+            continue
+        dest = target_dir / skill_dir.name
+        if dest.exists():
+            shutil.rmtree(dest)
+        shutil.copytree(str(skill_dir), dest)
+        logger.info("Installed skill '%s' to %s", skill_dir.name, dest)
+
+        # Register in openclaw.json
+        _register_skill(skill_dir.name)
+
+
+def _register_skill(skill_name: str) -> None:
+    """Add a skill entry to ~/.openclaw/openclaw.json."""
+    config_path = OPENCLAW_CONFIG_PATH
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if config_path.exists():
+        config = json.loads(config_path.read_text())
+    else:
+        config = {}
+
+    skills = config.setdefault("skills", {})
+    entries = skills.setdefault("entries", {})
+    entries[skill_name] = {"enabled": True}
+
+    config_path.write_text(json.dumps(config, indent=2) + "\n")
+    logger.info("Registered skill '%s' in %s", skill_name, config_path)
 
 
 def bootstrap_templates() -> None:

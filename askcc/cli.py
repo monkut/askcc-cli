@@ -8,7 +8,7 @@ from string import Template
 
 from . import __version__
 from .definitions import AgentConfig, AgentType
-from .functions import bootstrap_templates, fetch_github_issue, load_agent_config
+from .functions import bootstrap_templates, fetch_github_issue, install_skills, load_agent_config
 from .settings import configure_logging
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,20 @@ def main() -> None:
     review_parser = subparsers.add_parser("review", help="Run Claude in review mode (issue quality review).")
     review_parser.add_argument("--github-issue-url", required=True, help="GitHub issue URL to review.")
 
+    install_parser = subparsers.add_parser("install", help="Install bundled skills to the agent workspace.")
+    install_parser.add_argument(
+        "--directory",
+        type=Path,
+        default=None,
+        help="Target directory for skills (defaults to ~/.openclaw/workspace/skills).",
+    )
+
     args = parser.parse_args()
+
+    if args.command == "install":
+        install_skills(directory=args.directory)
+        return
+
     bootstrap_templates()
 
     agent = AgentType(args.command)

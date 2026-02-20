@@ -30,16 +30,20 @@ uvx --from . --python 3.14 askcc --help
 ## Usage
 
 ```
-askcc [--cwd DIR] {plan,develop,review} --github-issue-url URL
+askcc [--cwd DIR] {plan,develop,review,explore,diagnose} --github-issue-url URL
+askcc install [--directory DIR]
 ```
 
 ### Commands
 
-| Command   | Description                                                        |
-|-----------|--------------------------------------------------------------------|
-| `plan`    | Fetch the issue and run Claude in planning mode (architecture/design) |
-| `develop` | Fetch the issue and run Claude in development mode (implementation)   |
-| `review`  | Fetch the issue and run Claude in review mode (issue quality review)   |
+| Command    | Description                                                              |
+|------------|--------------------------------------------------------------------------|
+| `plan`     | Fetch the issue and run Claude in planning mode (architecture/design)    |
+| `develop`  | Fetch the issue and run Claude in development mode (implementation)      |
+| `review`   | Fetch the issue and run Claude in review mode (issue quality review)     |
+| `explore`  | Fetch the issue and run Claude in explore mode (investigate and propose solutions) |
+| `diagnose` | Fetch the issue and run Claude in diagnose mode (root cause analysis)    |
+| `install`  | Install bundled skills to the agent workspace                            |
 
 ### Options
 
@@ -47,6 +51,7 @@ askcc [--cwd DIR] {plan,develop,review} --github-issue-url URL
 |----------------------|----------------------------------------------------------|
 | `--github-issue-url` | **(required)** GitHub issue URL to process               |
 | `--cwd`              | Working directory for the Claude subprocess (default: cwd) |
+| `--directory`        | Target directory for skills (`install` command only)       |
 | `--version`          | Show version                                             |
 
 ### Environment Variables
@@ -62,12 +67,16 @@ On first run, askcc creates `~/.askcc/templates/` with default template files:
 
 | File                       | Required variables | Description                          |
 |----------------------------|--------------------|--------------------------------------|
-| `PLAN_SYSTEM_PROMPT.md`    | —                  | System prompt for the planning agent |
-| `PLAN_USER_PROMPT.md`      | `$issue_content`   | User prompt template for planning    |
-| `DEVELOP_SYSTEM_PROMPT.md` | —                  | System prompt for the dev agent      |
-| `DEVELOP_USER_PROMPT.md`   | `$issue_content`   | User prompt template for development |
-| `REVIEW_SYSTEM_PROMPT.md`  | —                  | System prompt for the review agent   |
-| `REVIEW_USER_PROMPT.md`    | `$issue_content`   | User prompt template for review      |
+| `PLAN_SYSTEM_PROMPT.md`      | —                  | System prompt for the planning agent   |
+| `PLAN_USER_PROMPT.md`        | `$issue_content`   | User prompt template for planning      |
+| `DEVELOP_SYSTEM_PROMPT.md`   | —                  | System prompt for the dev agent        |
+| `DEVELOP_USER_PROMPT.md`     | `$issue_content`   | User prompt template for development   |
+| `REVIEW_SYSTEM_PROMPT.md`    | —                  | System prompt for the review agent     |
+| `REVIEW_USER_PROMPT.md`      | `$issue_content`   | User prompt template for review        |
+| `EXPLORE_SYSTEM_PROMPT.md`   | —                  | System prompt for the explore agent    |
+| `EXPLORE_USER_PROMPT.md`     | `$issue_content`   | User prompt template for exploration   |
+| `DIAGNOSE_SYSTEM_PROMPT.md`  | —                  | System prompt for the diagnose agent   |
+| `DIAGNOSE_USER_PROMPT.md`    | `$issue_content`   | User prompt template for diagnosis     |
 
 Edit any file to customize the agent's behavior. User prompt templates **must** contain the `$issue_content` variable, which is replaced with the fetched GitHub issue at runtime. askcc validates this on startup and raises an error if a required variable is missing.
 

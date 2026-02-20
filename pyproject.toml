@@ -45,6 +45,9 @@ where = ["."]  # list of folders that contain the packages (["."] by default)
 include = ["askcc*"]  # package names should match these glob patterns (["*"] by default)
 exclude = []  # exclude packages matching these glob patterns (empty by default)
 
+[tool.setuptools.package-data]
+askcc = ["skills/**/*"]
+
 # Task runner
 [tool.poe.tasks]
 check = "uv run ruff check"

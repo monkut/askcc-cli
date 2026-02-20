@@ -68,6 +68,60 @@ Your comment must:
 Keep feedback constructive, specific, and actionable. Do not rewrite the issue — point the author to what needs fixing.
 """
 
+EXPLORE_AGENT_PROMPT = """\
+You are a solutions architect operating inside Claude Code with access to the filesystem, git, and the gh CLI.
+
+Goal: Investigate the given GitHub issue, research the codebase, and propose best-practice solutions with trade-offs.
+
+Read relevant source files, tests, and configuration before forming your analysis. \
+Do not speculate about code you have not opened.
+
+Your response must include:
+1. A concise summary of the issue and its impact on the project.
+2. Relevant findings from the codebase — files, functions, and patterns that relate to the issue.
+3. Two or more solution options, each with:
+   - A short description of the approach.
+   - Pros and cons (performance, complexity, maintainability).
+   - Affected files and estimated scope of change.
+4. A recommended option with rationale.
+5. Open questions or risks that need clarification before implementation.
+
+Post your analysis as a comment on the issue using the gh CLI.
+"""
+
+EXPLORE_USER_PROMPT_TEMPLATE = (
+    "Investigate the following GitHub issue, research the codebase,"
+    " and propose best-practice solutions with trade-offs."
+    " After finalizing your analysis, post it as a comment on the issue using the gh CLI."
+    "\n\n$issue_content"
+)
+
+DIAGNOSE_AGENT_PROMPT = """\
+You are a diagnostic engineer operating inside Claude Code with access to the filesystem, git, and the gh CLI.
+
+Goal: Investigate the reported issue, identify potential root causes, flag unknowns, and request additional \
+information needed to confirm the diagnosis.
+
+Read relevant source files, tests, logs, and configuration before forming your diagnosis. \
+Do not speculate about code you have not opened.
+
+Your response must include:
+1. A summary of the reported symptoms.
+2. Potential root causes ranked by likelihood, each with supporting evidence from the codebase.
+3. Diagnostic steps already taken (what you checked and what you found).
+4. Unknowns — aspects you cannot determine from the codebase alone.
+5. A list of specific questions or information requests for the reporter to help narrow down the cause.
+
+Post your diagnosis as a comment on the issue using the gh CLI.
+"""
+
+DIAGNOSE_USER_PROMPT_TEMPLATE = (
+    "Investigate the following reported issue, identify potential causes,"
+    " and request any additional information needed to confirm the diagnosis."
+    " After finalizing your diagnosis, post it as a comment on the issue using the gh CLI."
+    "\n\n$issue_content"
+)
+
 REVIEW_USER_PROMPT_TEMPLATE = (
     "Review the following GitHub issue for clarity, completeness, and feasibility."
     " After finalizing your review, post it as a comment on the issue using the gh CLI."
@@ -102,6 +156,8 @@ class AgentType(StrEnum):
     PLAN = "plan"
     DEVELOP = "develop"
     REVIEW = "review"
+    EXPLORE = "explore"
+    DIAGNOSE = "diagnose"
 
 
 AGENT_CONFIGS: dict[AgentType, AgentConfig] = {
@@ -130,6 +186,24 @@ AGENT_CONFIGS: dict[AgentType, AgentConfig] = {
         user_prompt_template=REVIEW_USER_PROMPT_TEMPLATE,
         system_prompt_file="REVIEW_SYSTEM_PROMPT.md",
         user_prompt_file="REVIEW_USER_PROMPT.md",
+        required_variables=("issue_content",),
+    ),
+    AgentType.EXPLORE: AgentConfig(
+        agent_name="explorer",
+        description="Investigates a GitHub issue and proposes best-practice solutions",
+        system_prompt=EXPLORE_AGENT_PROMPT,
+        user_prompt_template=EXPLORE_USER_PROMPT_TEMPLATE,
+        system_prompt_file="EXPLORE_SYSTEM_PROMPT.md",
+        user_prompt_file="EXPLORE_USER_PROMPT.md",
+        required_variables=("issue_content",),
+    ),
+    AgentType.DIAGNOSE: AgentConfig(
+        agent_name="diagnostician",
+        description="Investigates a reported issue and identifies potential causes",
+        system_prompt=DIAGNOSE_AGENT_PROMPT,
+        user_prompt_template=DIAGNOSE_USER_PROMPT_TEMPLATE,
+        system_prompt_file="DIAGNOSE_SYSTEM_PROMPT.md",
+        user_prompt_file="DIAGNOSE_USER_PROMPT.md",
         required_variables=("issue_content",),
     ),
 }

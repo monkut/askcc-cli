@@ -69,6 +69,14 @@ def main() -> None:
     review_parser = subparsers.add_parser("review", help="Run Claude in review mode (issue quality review).")
     review_parser.add_argument("--github-issue-url", required=True, help="GitHub issue URL to review.")
 
+    explore_parser = subparsers.add_parser(
+        "explore", help="Run Claude in explore mode (investigate and propose solutions)."
+    )
+    explore_parser.add_argument("--github-issue-url", required=True, help="GitHub issue URL to explore.")
+
+    diagnose_parser = subparsers.add_parser("diagnose", help="Run Claude in diagnose mode (root cause analysis).")
+    diagnose_parser.add_argument("--github-issue-url", required=True, help="GitHub issue URL to diagnose.")
+
     install_parser = subparsers.add_parser("install", help="Install bundled skills to the agent workspace.")
     install_parser.add_argument(
         "--directory",

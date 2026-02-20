@@ -1,6 +1,6 @@
 ---
 name: request-askcc
-description: Request REVIEW, PLAN or DEVELOP actions for GitHub issues via the askcc CLI. Use when a user asks to review, plan an implementation of a GitHub issue, or to proceed with development of a planned GitHub issue.
+description: Request REVIEW, PLAN, DEVELOP, EXPLORE or DIAGNOSE actions for GitHub issues via the askcc CLI. Use when a user asks to review, plan, develop, explore, or diagnose a GitHub issue.
 ---
 
 # Request GitHub Issue Action
@@ -11,7 +11,9 @@ Use the `askcc` tool to request processing (plan or develop) of GitHub issues de
 
 - When a user asks to PLAN an implementation of a given GitHub issue, use `askcc plan`.
 - When a user asks to DEVELOP a planned implementation defined in a given GitHub issue, use `askcc develop`.
-- When a user ask to REVIEW a github issue, use `askcc review`.
+- When a user asks to REVIEW a github issue, use `askcc review`.
+- When a user asks to EXPLORE a github issue (investigate and propose solutions), use `askcc explore`.
+- When a user asks to DIAGNOSE a github issue (root cause analysis), use `askcc diagnose`.
 
 ## Examples
 
@@ -35,6 +37,20 @@ Use the `askcc` tool to request processing (plan or develop) of GitHub issues de
   ```bash
   # This fetches the specified GitHub issue and runs Claude in review mode to assess issue quality and completeness. 
   askcc review --github-issue-url  https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1                                           
+  ```
+
+- "Explore https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1"
+
+  ```bash
+  # This investigates the github issue, researches the codebase, and proposes best-practice solutions with trade-offs.
+  askcc explore --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
+  ```
+
+- "Diagnose https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1"
+
+  ```bash
+  # This investigates the reported issue, identifies potential root causes, and requests additional information.
+  askcc diagnose --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
   ```
 
 WARNING: If the `{TARGET DEVELOPMENT REPOSITORY}` cannot be determined, ASK user in Slack.

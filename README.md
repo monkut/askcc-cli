@@ -60,6 +60,7 @@ askcc install [--directory DIR]
 |-------------|--------------------------------------------|---------|
 | `LOG_LEVEL`  | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, etc.) | `INFO`    |
 | `ASKCC_HOME` | Root directory for askcc configuration and templates   | `~/.askcc` |
+| `DECISION_ISSUE_LABEL` | GitHub label applied when an agent flags a decision is needed | `needs:decision` |
 
 ### Customizing Prompts
 
@@ -110,7 +111,7 @@ askcc/
     cli.py               # CLI entry point and subprocess execution
     definitions.py       # Agent types, prompts, and config
     functions.py         # GitHub issue fetching via gh CLI
-    settings.py          # Logging configuration
+    settings.py          # Configuration and environment variables
 tests/
     test_askcc.py        # Tests for URL parsing
 pyproject.toml           # Project metadata and tool config

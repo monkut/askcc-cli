@@ -1,7 +1,9 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
-DECISION_GUIDANCE = """\
+from askcc.settings import DECISION_ISSUE_LABEL
+
+DECISION_GUIDANCE = f"""\
 
 Decision handling:
 - When your analysis reveals unresolved ambiguities, competing approaches, or choices that depend on \
@@ -19,9 +21,9 @@ project priorities you cannot determine, include a structured decision block in 
 
 **Decision by:** <issue author or maintainer>
 
-- After posting the comment, check if the repository has a `needs:decision` label \
-by running `gh label list --search "needs:decision"`. \
-If the label exists, apply it to the issue with `gh issue edit <number> --add-label "needs:decision"`. \
+- After posting the comment, check if the repository has a `{DECISION_ISSUE_LABEL}` label \
+by running `gh label list --search "{DECISION_ISSUE_LABEL}"`. \
+If the label exists, apply it to the issue with `gh issue edit <number> --add-label "{DECISION_ISSUE_LABEL}"`. \
 Do not create the label if it does not exist.
 """
 
@@ -49,7 +51,7 @@ Keep the plan minimal and actionable. Do not propose changes beyond what the iss
 """
 )
 
-DEVELOP_AGENT_PROMPT = """\
+DEVELOP_AGENT_PROMPT = f"""\
 You are a software developer operating inside Claude Code with access to the filesystem, git, and the gh CLI.
 
 Goal: Implement the planned GitHub issue, open a pull request, and link it back to the issue.
@@ -59,7 +61,7 @@ Branching:
 'feature/<issue-number>-<short-description>' before making changes.
 
 Pre-check:
-- Before starting implementation, check if the issue has the `needs:decision` label \
+- Before starting implementation, check if the issue has the `{DECISION_ISSUE_LABEL}` label \
 by running `gh issue view <number> --json labels`. \
 If the label is present, post a comment stating that implementation is blocked pending a decision and stop.
 

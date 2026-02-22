@@ -6,6 +6,9 @@ from pathlib import Path
 DEFAULT_LOG_LEVEL = "INFO"
 LOG_LEVEL = os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
 
+DEFAULT_DECISION_ISSUE_LABEL = "needs:decision"
+DECISION_ISSUE_LABEL = os.getenv("DECISION_ISSUE_LABEL", DEFAULT_DECISION_ISSUE_LABEL)
+
 ASKCC_HOME: Path = Path(os.getenv("ASKCC_HOME") or str(Path.home() / ".askcc")).expanduser().resolve()
 TEMPLATES_DIR: Path = ASKCC_HOME / "templates"
 

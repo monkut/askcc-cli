@@ -48,6 +48,10 @@ include a structured decision block in your comment instead of assuming an answe
     + DECISION_GUIDANCE
     + """
 Keep the plan minimal and actionable. Do not propose changes beyond what the issue requires.
+
+IMPORTANT: You MUST post your complete plan as a comment on the GitHub issue using the gh CLI. \
+Extract the issue URL from the provided issue content and use `gh issue comment <url> --body "<your plan>"`. \
+Do NOT skip this step — the comment is the primary deliverable of this task.
 """
 )
 
@@ -110,6 +114,10 @@ between competing approaches or unclear requirements, include a structured decis
     + DECISION_GUIDANCE
     + """
 Keep feedback constructive, specific, and actionable. Do not rewrite the issue — point the author to what needs fixing.
+
+IMPORTANT: You MUST post your complete review as a comment on the GitHub issue using the gh CLI. \
+Extract the issue URL from the provided issue content and use `gh issue comment <url> --body "<your review>"`. \
+Do NOT skip this step — the comment is the primary deliverable of this task.
 """
 )
 
@@ -122,7 +130,7 @@ Goal: Investigate the given GitHub issue, research the codebase, and propose bes
 Read relevant source files, tests, and configuration before forming your analysis. \
 Do not speculate about code you have not opened.
 
-Your response must include:
+Your analysis must include:
 1. A concise summary of the issue and its impact on the project.
 2. Relevant findings from the codebase — files, functions, and patterns that relate to the issue.
 3. Two or more solution options, each with:
@@ -137,14 +145,16 @@ you cannot determine, include a structured decision block in your comment.
 """
     + DECISION_GUIDANCE
     + """
-Post your analysis as a comment on the issue using the gh CLI.
+IMPORTANT: You MUST post your complete analysis as a comment on the GitHub issue using the gh CLI. \
+Extract the issue URL from the provided issue content and use `gh issue comment <url> --body "<your analysis>"`. \
+Do NOT skip this step — the comment is the primary deliverable of this task.
 """
 )
 
 EXPLORE_USER_PROMPT_TEMPLATE = (
     "Investigate the following GitHub issue, research the codebase,"
     " and propose best-practice solutions with trade-offs."
-    " After finalizing your analysis, post it as a comment on the issue using the gh CLI."
+    " You MUST post your complete analysis as a comment on the GitHub issue using the gh CLI."
     "\n\n$issue_content"
 )
 
@@ -170,26 +180,28 @@ or which fix approach to take, include a structured decision block in your comme
 """
     + DECISION_GUIDANCE
     + """
-Post your diagnosis as a comment on the issue using the gh CLI.
+IMPORTANT: You MUST post your complete diagnosis as a comment on the GitHub issue using the gh CLI. \
+Extract the issue URL from the provided issue content and use `gh issue comment <url> --body "<your diagnosis>"`. \
+Do NOT skip this step — the comment is the primary deliverable of this task.
 """
 )
 
 DIAGNOSE_USER_PROMPT_TEMPLATE = (
     "Investigate the following reported issue, identify potential causes,"
     " and request any additional information needed to confirm the diagnosis."
-    " After finalizing your diagnosis, post it as a comment on the issue using the gh CLI."
+    " You MUST post your complete diagnosis as a comment on the GitHub issue using the gh CLI."
     "\n\n$issue_content"
 )
 
 REVIEW_USER_PROMPT_TEMPLATE = (
     "Review the following GitHub issue for clarity, completeness, and feasibility."
-    " After finalizing your review, post it as a comment on the issue using the gh CLI."
+    " You MUST post your complete review as a comment on the GitHub issue using the gh CLI."
     "\n\n$issue_content"
 )
 
 PLAN_USER_PROMPT_TEMPLATE = (
     "Analyze the following GitHub issue and produce an implementation plan."
-    " After finalizing the plan, post it as a comment on the issue using the gh CLI."
+    " You MUST post your complete plan as a comment on the GitHub issue using the gh CLI."
     "\n\n$issue_content"
 )
 DEVELOP_USER_PROMPT_TEMPLATE = (

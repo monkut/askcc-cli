@@ -17,7 +17,7 @@ DEFAULT_PERMISSION_MODE = "acceptEdits"
 
 
 def _run_claude(prompt: str, config: AgentConfig, *, cwd: Path | None = None) -> int:
-    """Run claude CLI with the given prompt, streaming output to stdout/stderr."""
+    """Run claude CLI with the given prompt, capturing JSON output for token usage reporting."""
     agent_definition = {config.agent_name: {"description": config.description, "prompt": config.system_prompt}}
 
     cmd = [
@@ -25,7 +25,7 @@ def _run_claude(prompt: str, config: AgentConfig, *, cwd: Path | None = None) ->
         "-p",
         prompt,
         "--output-format",
-        "text",
+        "json",
         "--dangerously-skip-permissions",
         "--agents",
         json.dumps(agent_definition),
@@ -36,9 +36,31 @@ def _run_claude(prompt: str, config: AgentConfig, *, cwd: Path | None = None) ->
         cmd,
         text=True,
         check=False,
+        capture_output=True,
         cwd=cwd,
     )
     logger.info("Claude Code finished (exit code: %d)", result.returncode)
+
+    if result.stdout:
+        try:
+            data = json.loads(result.stdout)
+            response_text = data.get("result", "")
+            if response_text:
+                print(response_text)  # noqa: T201
+            usage = data.get("usage")
+            if usage:
+                logger.info(
+                    "Token usage — input: %s, output: %s",
+                    usage.get("input_tokens", "N/A"),
+                    usage.get("output_tokens", "N/A"),
+                )
+        except json.JSONDecodeError:
+            logger.warning("Failed to parse Claude JSON output")
+            print(result.stdout)  # noqa: T201
+
+    if result.stderr:
+        print(result.stderr, file=sys.stderr)  # noqa: T201
+
     return result.returncode
 
 

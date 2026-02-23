@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import json
+import subprocess
 from string import Template
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pytest
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-from askcc.definitions import AGENT_CONFIGS, AgentType
+from askcc.cli import _run_claude
+from askcc.definitions import AGENT_CONFIGS, AgentConfig, AgentType
 from askcc.functions import (
     _parse_issue_url,
     bootstrap_templates,
@@ -210,3 +214,61 @@ class TestStringTemplateSubstitution:
         result = Template(template_str).safe_substitute(issue_content=issue)
         assert '{"json": true' in result
         assert "$issue_content" not in result
+
+
+class TestRunClaude:
+    @pytest.fixture
+    def agent_config(self) -> AgentConfig:
+        return AgentConfig(
+            agent_name="test-agent",
+            description="A test agent",
+            system_prompt="You are a test agent.",
+            user_prompt_template="$issue_content",
+            system_prompt_file="TEST_SYSTEM_PROMPT.md",
+            user_prompt_file="TEST_USER_PROMPT.md",
+        )
+
+    def test_logs_token_usage(
+        self, agent_config: AgentConfig, capfd: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
+    ):
+        claude_response = json.dumps(
+            {
+                "result": "Here is the plan.",
+                "usage": {"input_tokens": 1500, "output_tokens": 300},
+            }
+        )
+        mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=claude_response, stderr="")
+
+        with (
+            caplog.at_level("INFO", logger="askcc.cli"),
+            patch("askcc.cli.subprocess.run", return_value=mock_result) as mock_run,
+        ):
+            exit_code = _run_claude("test prompt", config=agent_config)
+
+        assert exit_code == 0
+        captured = capfd.readouterr()
+        assert "Here is the plan." in captured.out
+        assert "input: 1500" in caplog.text
+        assert "output: 300" in caplog.text
+        mock_run.assert_called_once()
+
+    def test_handles_invalid_json(
+        self, agent_config: AgentConfig, capfd: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
+    ):
+        mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="not json", stderr="")
+
+        with patch("askcc.cli.subprocess.run", return_value=mock_result):
+            exit_code = _run_claude("test prompt", config=agent_config)
+
+        assert exit_code == 0
+        captured = capfd.readouterr()
+        assert "not json" in captured.out
+        assert "Failed to parse Claude JSON output" in caplog.text
+
+    def test_returns_nonzero_exit_code(self, agent_config: AgentConfig):
+        mock_result = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="error occurred")
+
+        with patch("askcc.cli.subprocess.run", return_value=mock_result):
+            exit_code = _run_claude("test prompt", config=agent_config)
+
+        assert exit_code == 1

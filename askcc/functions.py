@@ -64,7 +64,7 @@ def fetch_github_issue(github_issue_url: str) -> str:
     comments_data = json.loads(comments_result.stdout)
     comment_texts = [f"Comment by @{c['user']['login']}:\n{c['body']}" for c in comments_data]
 
-    sections = [f"Issue #{issue_number}:\n{issue_text}"]
+    sections = [f"Issue URL: {github_issue_url}\n\nIssue #{issue_number}:\n{issue_text}"]
     if comment_texts:
         sections.append("Comments:\n" + "\n---\n".join(comment_texts))
     logger.info("Fetched issue with %d comment(s)", len(comment_texts))

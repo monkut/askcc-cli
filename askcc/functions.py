@@ -178,6 +178,42 @@ def validate_template(template_text: str, required_variables: tuple[str, ...], f
             raise ValueError(msg)
 
 
+def append_usage_to_last_comment(github_issue_url: str, usage: dict) -> None:
+    """Append a :tokens-used: line to the last comment on a GitHub issue."""
+    gh = _require_gh_cli()
+    owner, repo, issue_number = _parse_issue_url(github_issue_url)
+    repo_nwo = f"{owner}/{repo}"
+
+    result = subprocess.run(  # noqa: S603
+        [gh, "api", f"repos/{repo_nwo}/issues/{issue_number}/comments", "--jq", ".[-1]"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    comment_json = result.stdout.strip()
+    if not comment_json or comment_json == "null":
+        logger.warning("No comments found on issue #%d, skipping usage append", issue_number)
+        return
+
+    comment = json.loads(comment_json)
+    comment_id = comment["id"]
+    existing_body = comment["body"]
+
+    input_tokens = usage.get("input_tokens", "N/A")
+    output_tokens = usage.get("output_tokens", "N/A")
+    usage_line = f"\n\n:tokens-used: input: {input_tokens}, output: {output_tokens}"
+    updated_body = existing_body + usage_line
+
+    subprocess.run(  # noqa: S603
+        [gh, "api", f"repos/{repo_nwo}/issues/comments/{comment_id}", "-X", "PATCH", "-f", f"body={updated_body}"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    logger.info("Appended token usage to comment %d on issue #%d", comment_id, issue_number)
+
+
 def load_agent_config(agent: AgentType) -> AgentConfig:
     """Load an AgentConfig with templates read from disk, falling back to built-in defaults."""
     base = AGENT_CONFIGS[agent]

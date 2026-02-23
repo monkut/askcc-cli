@@ -15,6 +15,7 @@ from askcc.cli import _run_claude
 from askcc.definitions import AGENT_CONFIGS, AgentConfig, AgentType
 from askcc.functions import (
     _parse_issue_url,
+    append_usage_to_last_comment,
     bootstrap_templates,
     load_agent_config,
     load_template,
@@ -243,9 +244,10 @@ class TestRunClaude:
             caplog.at_level("INFO", logger="askcc.cli"),
             patch("askcc.cli.subprocess.run", return_value=mock_result) as mock_run,
         ):
-            exit_code = _run_claude("test prompt", config=agent_config)
+            exit_code, usage = _run_claude("test prompt", config=agent_config)
 
         assert exit_code == 0
+        assert usage == {"input_tokens": 1500, "output_tokens": 300}
         captured = capfd.readouterr()
         assert "Here is the plan." in captured.out
         assert "input: 1500" in caplog.text
@@ -258,9 +260,10 @@ class TestRunClaude:
         mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="not json", stderr="")
 
         with patch("askcc.cli.subprocess.run", return_value=mock_result):
-            exit_code = _run_claude("test prompt", config=agent_config)
+            exit_code, usage = _run_claude("test prompt", config=agent_config)
 
         assert exit_code == 0
+        assert usage is None
         captured = capfd.readouterr()
         assert "not json" in captured.out
         assert "Failed to parse Claude JSON output" in caplog.text
@@ -269,6 +272,67 @@ class TestRunClaude:
         mock_result = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="error occurred")
 
         with patch("askcc.cli.subprocess.run", return_value=mock_result):
-            exit_code = _run_claude("test prompt", config=agent_config)
+            exit_code, usage = _run_claude("test prompt", config=agent_config)
 
         assert exit_code == 1
+        assert usage is None
+
+    def test_returns_none_usage_when_no_usage_key(self, agent_config: AgentConfig):
+        claude_response = json.dumps({"result": "Done."})
+        mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=claude_response, stderr="")
+
+        with patch("askcc.cli.subprocess.run", return_value=mock_result):
+            exit_code, usage = _run_claude("test prompt", config=agent_config)
+
+        assert exit_code == 0
+        assert usage is None
+
+
+class TestAppendUsageToLastComment:
+    ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/42"
+
+    def test_appends_usage_to_last_comment(self):
+        comment_json = json.dumps({"id": 123, "body": "Existing comment body"})
+        get_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=comment_json, stderr="")
+        patch_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+        with (
+            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
+            patch("askcc.functions.subprocess.run", side_effect=[get_result, patch_result]) as mock_run,
+        ):
+            append_usage_to_last_comment(self.ISSUE_URL, {"input_tokens": 1500, "output_tokens": 300})
+
+        assert mock_run.call_count == 2
+        patch_call = mock_run.call_args_list[1]
+        body_arg = patch_call[0][0][-1]
+        assert ":tokens-used: input: 1500, output: 300" in body_arg
+
+    def test_noop_when_no_comments(self, caplog: pytest.LogCaptureFixture):
+        get_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="null", stderr="")
+
+        with (
+            caplog.at_level("WARNING", logger="askcc.functions"),
+            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
+            patch("askcc.functions.subprocess.run", return_value=get_result) as mock_run,
+        ):
+            append_usage_to_last_comment(self.ISSUE_URL, {"input_tokens": 100, "output_tokens": 50})
+
+        mock_run.assert_called_once()
+        assert "No comments found" in caplog.text
+
+    def test_preserves_existing_body(self):
+        original_body = "Line 1\nLine 2\n\nMore text"
+        comment_json = json.dumps({"id": 456, "body": original_body})
+        get_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=comment_json, stderr="")
+        patch_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+        with (
+            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
+            patch("askcc.functions.subprocess.run", side_effect=[get_result, patch_result]) as mock_run,
+        ):
+            append_usage_to_last_comment(self.ISSUE_URL, {"input_tokens": 200, "output_tokens": 100})
+
+        patch_call = mock_run.call_args_list[1]
+        body_arg = patch_call[0][0][-1]
+        expected = f"body={original_body}\n\n:tokens-used: input: 200, output: 100"
+        assert body_arg == expected

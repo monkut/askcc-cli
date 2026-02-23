@@ -8,7 +8,7 @@ from string import Template
 
 from . import __version__
 from .definitions import AgentConfig, AgentType
-from .functions import bootstrap_templates, fetch_github_issue, install_skills, load_agent_config
+from .functions import bootstrap_templates, fetch_github_issue, install_skills, load_agent_config, validate_issue_labels
 from .settings import configure_logging
 
 logger = logging.getLogger(__name__)
@@ -92,6 +92,12 @@ def main() -> None:
         return
 
     bootstrap_templates()
+
+    label_errors = validate_issue_labels(args.github_issue_url)
+    if label_errors:
+        for error in label_errors:
+            logger.error(error)
+        sys.exit(1)
 
     agent = AgentType(args.command)
     config = load_agent_config(agent)

@@ -9,7 +9,7 @@ from string import Template
 from urllib.parse import urlparse
 
 from .definitions import AGENT_CONFIGS, AgentConfig, AgentType
-from .settings import TEMPLATES_DIR
+from .settings import REQUIRED_ISSUE_LABEL_PREFIXES, TEMPLATES_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +70,33 @@ def fetch_github_issue(github_issue_url: str) -> str:
     logger.info("Fetched issue with %d comment(s)", len(comment_texts))
 
     return "\n\n".join(sections)
+
+
+def validate_issue_labels(github_issue_url: str) -> list[str]:
+    """Validate that the issue has at least one label matching each required prefix.
+
+    Returns a list of error messages (empty if all prefixes are satisfied).
+    """
+    if not REQUIRED_ISSUE_LABEL_PREFIXES:
+        return []
+
+    gh = _require_gh_cli()
+    owner, repo, issue_number = _parse_issue_url(github_issue_url)
+    repo_nwo = f"{owner}/{repo}"
+
+    result = subprocess.run(  # noqa: S603
+        [gh, "api", f"repos/{repo_nwo}/issues/{issue_number}", "--jq", "[.labels[].name]"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    labels: list[str] = json.loads(result.stdout)
+
+    errors = []
+    for prefix in REQUIRED_ISSUE_LABEL_PREFIXES:
+        if not any(label.startswith(prefix) for label in labels):
+            errors.append(f"Missing required label with prefix '{prefix}' (found: {labels})")
+    return errors
 
 
 DEFAULT_SKILLS_DIR = Path.home() / ".openclaw" / "workspace" / "skills"

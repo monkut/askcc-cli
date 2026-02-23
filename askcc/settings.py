@@ -9,6 +9,9 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
 DEFAULT_DECISION_ISSUE_LABEL = "needs:decision"
 DECISION_ISSUE_LABEL = os.getenv("DECISION_ISSUE_LABEL", DEFAULT_DECISION_ISSUE_LABEL)
 
+ENABLE_ISSUE_LABEL_PREFIX_VALIDATION: bool = os.getenv("ENABLE_ISSUE_LABEL_PREFIX_VALIDATION", "true").lower() == "true"
+REQUIRED_ISSUE_LABEL_PREFIXES: tuple[str, ...] = ("action:",)
+
 ASKCC_HOME: Path = Path(os.getenv("ASKCC_HOME") or str(Path.home() / ".askcc")).expanduser().resolve()
 TEMPLATES_DIR: Path = ASKCC_HOME / "templates"
 

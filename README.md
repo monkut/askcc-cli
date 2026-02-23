@@ -61,6 +61,7 @@ askcc install [--directory DIR]
 | `LOG_LEVEL`  | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, etc.) | `INFO`    |
 | `ASKCC_HOME` | Root directory for askcc configuration and templates   | `~/.askcc` |
 | `DECISION_ISSUE_LABEL` | GitHub label applied when an agent flags a decision is needed | `needs:decision` |
+| `ENABLE_ISSUE_LABEL_PREFIX_VALIDATION` | Enable/disable issue label prefix validation before agent execution | `true` |
 
 ### Customizing Prompts
 

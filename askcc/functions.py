@@ -9,7 +9,7 @@ from string import Template
 from urllib.parse import urlparse
 
 from .definitions import AGENT_CONFIGS, AgentConfig, AgentType
-from .settings import REQUIRED_ISSUE_LABEL_PREFIXES, TEMPLATES_DIR
+from .settings import ENABLE_ISSUE_LABEL_PREFIX_VALIDATION, REQUIRED_ISSUE_LABEL_PREFIXES, TEMPLATES_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +77,7 @@ def validate_issue_labels(github_issue_url: str) -> list[str]:
 
     Returns a list of error messages (empty if all prefixes are satisfied).
     """
-    if not REQUIRED_ISSUE_LABEL_PREFIXES:
+    if not ENABLE_ISSUE_LABEL_PREFIX_VALIDATION or not REQUIRED_ISSUE_LABEL_PREFIXES:
         return []
 
     gh = _require_gh_cli()

@@ -7,7 +7,7 @@ from pathlib import Path
 from string import Template
 
 from . import __version__
-from .definitions import AgentConfig, AgentType
+from .definitions import AgentAction, AgentConfig
 from .functions import (
     append_usage_to_last_comment,
     bootstrap_templates,
@@ -25,7 +25,7 @@ DEFAULT_PERMISSION_MODE = "acceptEdits"
 
 def _run_claude(prompt: str, config: AgentConfig, *, cwd: Path | None = None) -> tuple[int, dict | None]:
     """Run claude CLI with the given prompt, capturing JSON output for token usage reporting."""
-    agent_definition = {config.agent_name: {"description": config.description, "prompt": config.system_prompt}}
+    agent_definition = {config.action_name: {"description": config.description, "prompt": config.system_prompt}}
 
     cmd = [
         "claude",
@@ -38,7 +38,7 @@ def _run_claude(prompt: str, config: AgentConfig, *, cwd: Path | None = None) ->
         json.dumps(agent_definition),
     ]
 
-    logger.info("Requesting '%s' from Claude Code ...", config.agent_name)
+    logger.info("Requesting '%s' action from Claude Code ...", config.action_name)
     result = subprocess.run(  # noqa: S603
         cmd,
         text=True,
@@ -137,7 +137,7 @@ def main() -> None:
                 logger.error(error)
             sys.exit(1)
 
-    agent = AgentType(args.command)
+    agent = AgentAction(args.command)
     config = load_agent_config(agent)
     issue_content = fetch_github_issue(args.github_issue_url)
     prompt = Template(config.user_prompt_template).safe_substitute(issue_content=issue_content)

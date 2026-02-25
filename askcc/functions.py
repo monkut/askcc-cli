@@ -8,7 +8,7 @@ from pathlib import Path
 from string import Template
 from urllib.parse import urlparse
 
-from .definitions import AGENT_CONFIGS, AgentConfig, AgentType
+from .definitions import AGENT_CONFIGS, AgentAction, AgentConfig
 from .settings import ENABLE_ISSUE_LABEL_PREFIX_VALIDATION, REQUIRED_ISSUE_LABEL_PREFIXES, TEMPLATES_DIR
 
 logger = logging.getLogger(__name__)
@@ -214,7 +214,7 @@ def append_usage_to_last_comment(github_issue_url: str, usage: dict) -> None:
     logger.info("Appended token usage to comment %d on issue #%d", comment_id, issue_number)
 
 
-def load_agent_config(agent: AgentType) -> AgentConfig:
+def load_agent_config(agent: AgentAction) -> AgentConfig:
     """Load an AgentConfig with templates read from disk, falling back to built-in defaults."""
     base = AGENT_CONFIGS[agent]
     user_prompt_template = load_template(base.user_prompt_file, base.user_prompt_template)

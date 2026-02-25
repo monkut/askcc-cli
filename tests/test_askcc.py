@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from askcc.cli import _run_claude
-from askcc.definitions import AGENT_CONFIGS, AgentConfig, AgentType
+from askcc.definitions import AGENT_CONFIGS, AgentAction, AgentConfig
 from askcc.functions import (
     _parse_issue_url,
     append_usage_to_last_comment,
@@ -88,7 +88,7 @@ class TestBootstrapTemplates:
 
         bootstrap_templates()
 
-        plan_config = AGENT_CONFIGS[AgentType.PLAN]
+        plan_config = AGENT_CONFIGS[AgentAction.PLAN]
         assert (templates_dir / "PLAN_SYSTEM_PROMPT.md").read_text() == plan_config.system_prompt
         assert (templates_dir / "PLAN_USER_PROMPT.md").read_text() == plan_config.user_prompt_template
 
@@ -151,17 +151,17 @@ class TestLoadAgentConfig:
         custom_system = "Custom system prompt for plan"
         (templates_dir / "PLAN_SYSTEM_PROMPT.md").write_text(custom_system)
 
-        config = load_agent_config(AgentType.PLAN)
+        config = load_agent_config(AgentAction.PLAN)
         assert config.system_prompt == custom_system
-        assert config.agent_name == "planner"
+        assert config.action_name == "plan"
 
     def test_preserves_non_template_fields(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         templates_dir = tmp_path / "templates"
         monkeypatch.setattr("askcc.functions.TEMPLATES_DIR", templates_dir)
         bootstrap_templates()
 
-        config = load_agent_config(AgentType.DEVELOP)
-        assert config.agent_name == "developer"
+        config = load_agent_config(AgentAction.DEVELOP)
+        assert config.action_name == "develop"
         assert config.description == "Develops a planned/defined issue"
 
     def test_load_review_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -169,8 +169,8 @@ class TestLoadAgentConfig:
         monkeypatch.setattr("askcc.functions.TEMPLATES_DIR", templates_dir)
         bootstrap_templates()
 
-        config = load_agent_config(AgentType.REVIEW)
-        assert config.agent_name == "reviewer"
+        config = load_agent_config(AgentAction.REVIEW)
+        assert config.action_name == "review"
         assert config.description == "Reviews a GitHub issue for clarity, completeness, and feasibility"
 
     def test_load_explore_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -178,8 +178,8 @@ class TestLoadAgentConfig:
         monkeypatch.setattr("askcc.functions.TEMPLATES_DIR", templates_dir)
         bootstrap_templates()
 
-        config = load_agent_config(AgentType.EXPLORE)
-        assert config.agent_name == "explorer"
+        config = load_agent_config(AgentAction.EXPLORE)
+        assert config.action_name == "explore"
         assert config.description == "Investigates a GitHub issue and proposes best-practice solutions"
 
     def test_load_diagnose_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -187,8 +187,8 @@ class TestLoadAgentConfig:
         monkeypatch.setattr("askcc.functions.TEMPLATES_DIR", templates_dir)
         bootstrap_templates()
 
-        config = load_agent_config(AgentType.DIAGNOSE)
-        assert config.agent_name == "diagnostician"
+        config = load_agent_config(AgentAction.DIAGNOSE)
+        assert config.action_name == "diagnose"
         assert config.description == "Investigates a reported issue and identifies potential causes"
 
     def test_raises_on_missing_required_variable(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -200,7 +200,7 @@ class TestLoadAgentConfig:
         (templates_dir / "PLAN_USER_PROMPT.md").write_text("No variable here")
 
         with pytest.raises(ValueError, match="missing required variable"):
-            load_agent_config(AgentType.PLAN)
+            load_agent_config(AgentAction.PLAN)
 
 
 class TestStringTemplateSubstitution:
@@ -221,7 +221,7 @@ class TestRunClaude:
     @pytest.fixture
     def agent_config(self) -> AgentConfig:
         return AgentConfig(
-            agent_name="test-agent",
+            action_name="test-agent",
             description="A test agent",
             system_prompt="You are a test agent.",
             user_prompt_template="$issue_content",

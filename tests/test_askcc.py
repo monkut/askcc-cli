@@ -348,7 +348,7 @@ class TestLanguageOption:
             patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
             patch("askcc.cli._run_claude", return_value=(0, None)) as mock_claude,
-            patch("sys.argv", ["askcc", *extra_args, "plan", "-g", self.ISSUE_URL]),
+            patch("sys.argv", ["askcc", *extra_args, AgentAction.PLAN, "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
         ):
             main()

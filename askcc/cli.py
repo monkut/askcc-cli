@@ -148,8 +148,8 @@ def main() -> None:
     config = load_agent_config(agent)
     issue_content = fetch_github_issue(args.github_issue_url)
     prompt = Template(config.user_prompt_template).safe_substitute(issue_content=issue_content)
-    if args.language == SupportedLanguage.JAPANESE:
-        prompt += "\nOutput all comments in Japanese."
+    if args.language != SupportedLanguage.ENGLISH:
+        prompt += f"\nOutput all comments in {args.language}."
     logger.info("Prompt prepared for '%s' command", agent.value)
     return_code, usage = _run_claude(prompt, config=config, cwd=args.cwd)
 

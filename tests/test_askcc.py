@@ -356,12 +356,12 @@ class TestLanguageOption:
 
     def test_japanese_appends_instruction(self):
         prompt = self._run_main(["--language", "japanese"])
-        assert prompt.endswith("\nOutput all comments in Japanese.")
+        assert prompt.endswith("\nOutput all comments in japanese.")
 
     def test_english_no_append(self):
         prompt = self._run_main(["--language", "english"])
-        assert "Output all comments in Japanese." not in prompt
+        assert "Output all comments in" not in prompt
 
     def test_default_no_append(self):
         prompt = self._run_main([])
-        assert "Output all comments in Japanese." not in prompt
+        assert "Output all comments in" not in prompt

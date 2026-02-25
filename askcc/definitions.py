@@ -39,7 +39,8 @@ Do not speculate about code you have not opened.
 Your plan must include:
 1. A summary of the current state — what exists today that relates to the issue.
 2. Step-by-step implementation tasks, each referencing specific files and functions.
-3. Acceptance criteria — concrete, verifiable conditions that confirm the issue is resolved.
+3. Acceptance criteria — concrete, verifiable conditions that confirm the issue is resolved. \
+Provide clear and explicit verification criteria (e.g., commands to run, expected output, or manual steps).
 4. Risks or open questions — flag ambiguities in the issue rather than assuming intent.
 
 When open questions require a decision from the issue author or maintainer before planning can proceed, \

@@ -87,25 +87,32 @@ def main() -> None:
         default=None,
         help="Working directory for the claude subprocess (defaults to current directory).",
     )
+    parser.add_argument(
+        "-i",
+        "--ignore-labels",
+        action="store_true",
+        default=False,
+        help="Bypass issue label verification.",
+    )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     plan_parser = subparsers.add_parser("plan", help="Run Claude in plan mode (read-only analysis).")
-    plan_parser.add_argument("--github-issue-url", required=True, help="GitHub issue URL to plan.")
+    plan_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL to plan.")
 
     develop_parser = subparsers.add_parser("develop", help="Run Claude in development mode.")
-    develop_parser.add_argument("--github-issue-url", required=True, help="GitHub issue URL to develop.")
+    develop_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL to develop.")
 
     review_parser = subparsers.add_parser("review", help="Run Claude in review mode (issue quality review).")
-    review_parser.add_argument("--github-issue-url", required=True, help="GitHub issue URL to review.")
+    review_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL to review.")
 
     explore_parser = subparsers.add_parser(
         "explore", help="Run Claude in explore mode (investigate and propose solutions)."
     )
-    explore_parser.add_argument("--github-issue-url", required=True, help="GitHub issue URL to explore.")
+    explore_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL to explore.")
 
     diagnose_parser = subparsers.add_parser("diagnose", help="Run Claude in diagnose mode (root cause analysis).")
-    diagnose_parser.add_argument("--github-issue-url", required=True, help="GitHub issue URL to diagnose.")
+    diagnose_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL to diagnose.")
 
     install_parser = subparsers.add_parser("install", help="Install bundled skills to the agent workspace.")
     install_parser.add_argument(
@@ -123,11 +130,12 @@ def main() -> None:
 
     bootstrap_templates()
 
-    label_errors = validate_issue_labels(args.github_issue_url)
-    if label_errors:
-        for error in label_errors:
-            logger.error(error)
-        sys.exit(1)
+    if not args.ignore_labels:
+        label_errors = validate_issue_labels(args.github_issue_url)
+        if label_errors:
+            for error in label_errors:
+                logger.error(error)
+            sys.exit(1)
 
     agent = AgentType(args.command)
     config = load_agent_config(agent)

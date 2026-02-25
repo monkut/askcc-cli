@@ -7,7 +7,7 @@ from pathlib import Path
 from string import Template
 
 from . import __version__
-from .definitions import AgentConfig, AgentType
+from .definitions import AgentAction, AgentConfig
 from .functions import (
     append_usage_to_last_comment,
     bootstrap_templates,
@@ -137,7 +137,7 @@ def main() -> None:
                 logger.error(error)
             sys.exit(1)
 
-    agent = AgentType(args.command)
+    agent = AgentAction(args.command)
     config = load_agent_config(agent)
     issue_content = fetch_github_issue(args.github_issue_url)
     prompt = Template(config.user_prompt_template).safe_substitute(issue_content=issue_content)

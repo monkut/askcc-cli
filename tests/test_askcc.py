@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from askcc.cli import _run_claude
-from askcc.definitions import AGENT_CONFIGS, AgentConfig, AgentType
+from askcc.definitions import AGENT_CONFIGS, AgentAction, AgentConfig
 from askcc.functions import (
     _parse_issue_url,
     append_usage_to_last_comment,
@@ -88,7 +88,7 @@ class TestBootstrapTemplates:
 
         bootstrap_templates()
 
-        plan_config = AGENT_CONFIGS[AgentType.PLAN]
+        plan_config = AGENT_CONFIGS[AgentAction.PLAN]
         assert (templates_dir / "PLAN_SYSTEM_PROMPT.md").read_text() == plan_config.system_prompt
         assert (templates_dir / "PLAN_USER_PROMPT.md").read_text() == plan_config.user_prompt_template
 
@@ -151,7 +151,7 @@ class TestLoadAgentConfig:
         custom_system = "Custom system prompt for plan"
         (templates_dir / "PLAN_SYSTEM_PROMPT.md").write_text(custom_system)
 
-        config = load_agent_config(AgentType.PLAN)
+        config = load_agent_config(AgentAction.PLAN)
         assert config.system_prompt == custom_system
         assert config.action_name == "plan"
 
@@ -160,7 +160,7 @@ class TestLoadAgentConfig:
         monkeypatch.setattr("askcc.functions.TEMPLATES_DIR", templates_dir)
         bootstrap_templates()
 
-        config = load_agent_config(AgentType.DEVELOP)
+        config = load_agent_config(AgentAction.DEVELOP)
         assert config.action_name == "develop"
         assert config.description == "Develops a planned/defined issue"
 
@@ -169,7 +169,7 @@ class TestLoadAgentConfig:
         monkeypatch.setattr("askcc.functions.TEMPLATES_DIR", templates_dir)
         bootstrap_templates()
 
-        config = load_agent_config(AgentType.REVIEW)
+        config = load_agent_config(AgentAction.REVIEW)
         assert config.action_name == "review"
         assert config.description == "Reviews a GitHub issue for clarity, completeness, and feasibility"
 
@@ -178,7 +178,7 @@ class TestLoadAgentConfig:
         monkeypatch.setattr("askcc.functions.TEMPLATES_DIR", templates_dir)
         bootstrap_templates()
 
-        config = load_agent_config(AgentType.EXPLORE)
+        config = load_agent_config(AgentAction.EXPLORE)
         assert config.action_name == "explore"
         assert config.description == "Investigates a GitHub issue and proposes best-practice solutions"
 
@@ -187,7 +187,7 @@ class TestLoadAgentConfig:
         monkeypatch.setattr("askcc.functions.TEMPLATES_DIR", templates_dir)
         bootstrap_templates()
 
-        config = load_agent_config(AgentType.DIAGNOSE)
+        config = load_agent_config(AgentAction.DIAGNOSE)
         assert config.action_name == "diagnose"
         assert config.description == "Investigates a reported issue and identifies potential causes"
 
@@ -200,7 +200,7 @@ class TestLoadAgentConfig:
         (templates_dir / "PLAN_USER_PROMPT.md").write_text("No variable here")
 
         with pytest.raises(ValueError, match="missing required variable"):
-            load_agent_config(AgentType.PLAN)
+            load_agent_config(AgentAction.PLAN)
 
 
 class TestStringTemplateSubstitution:

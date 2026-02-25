@@ -94,6 +94,13 @@ def main() -> None:
         default=False,
         help="Bypass issue label verification.",
     )
+    parser.add_argument(
+        "-l",
+        "--language",
+        choices=["english", "japanese"],
+        default="english",
+        help="Language for agent output comments (default: english).",
+    )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -141,6 +148,8 @@ def main() -> None:
     config = load_agent_config(agent)
     issue_content = fetch_github_issue(args.github_issue_url)
     prompt = Template(config.user_prompt_template).safe_substitute(issue_content=issue_content)
+    if args.language == "japanese":
+        prompt += "\nOutput all comments in Japanese."
     logger.info("Prompt prepared for '%s' command", agent.value)
     return_code, usage = _run_claude(prompt, config=config, cwd=args.cwd)
 

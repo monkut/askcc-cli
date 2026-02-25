@@ -224,6 +224,11 @@ class AgentConfig:
     required_variables: tuple[str, ...] = ()
 
 
+class SupportedLanguage(StrEnum):
+    ENGLISH = "english"
+    JAPANESE = "japanese"
+
+
 class AgentAction(StrEnum):
     PLAN = "plan"
     DEVELOP = "develop"

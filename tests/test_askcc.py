@@ -153,7 +153,7 @@ class TestLoadAgentConfig:
 
         config = load_agent_config(AgentType.PLAN)
         assert config.system_prompt == custom_system
-        assert config.agent_name == "planner"
+        assert config.action_name == "planner"
 
     def test_preserves_non_template_fields(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         templates_dir = tmp_path / "templates"
@@ -161,7 +161,7 @@ class TestLoadAgentConfig:
         bootstrap_templates()
 
         config = load_agent_config(AgentType.DEVELOP)
-        assert config.agent_name == "developer"
+        assert config.action_name == "developer"
         assert config.description == "Develops a planned/defined issue"
 
     def test_load_review_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -170,7 +170,7 @@ class TestLoadAgentConfig:
         bootstrap_templates()
 
         config = load_agent_config(AgentType.REVIEW)
-        assert config.agent_name == "reviewer"
+        assert config.action_name == "reviewer"
         assert config.description == "Reviews a GitHub issue for clarity, completeness, and feasibility"
 
     def test_load_explore_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -179,7 +179,7 @@ class TestLoadAgentConfig:
         bootstrap_templates()
 
         config = load_agent_config(AgentType.EXPLORE)
-        assert config.agent_name == "explorer"
+        assert config.action_name == "explorer"
         assert config.description == "Investigates a GitHub issue and proposes best-practice solutions"
 
     def test_load_diagnose_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -188,7 +188,7 @@ class TestLoadAgentConfig:
         bootstrap_templates()
 
         config = load_agent_config(AgentType.DIAGNOSE)
-        assert config.agent_name == "diagnostician"
+        assert config.action_name == "diagnostician"
         assert config.description == "Investigates a reported issue and identifies potential causes"
 
     def test_raises_on_missing_required_variable(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -221,7 +221,7 @@ class TestRunClaude:
     @pytest.fixture
     def agent_config(self) -> AgentConfig:
         return AgentConfig(
-            agent_name="test-agent",
+            action_name="test-agent",
             description="A test agent",
             system_prompt="You are a test agent.",
             user_prompt_template="$issue_content",

@@ -25,7 +25,7 @@ DEFAULT_PERMISSION_MODE = "acceptEdits"
 
 def _run_claude(prompt: str, config: AgentConfig, *, cwd: Path | None = None) -> tuple[int, dict | None]:
     """Run claude CLI with the given prompt, capturing JSON output for token usage reporting."""
-    agent_definition = {config.agent_name: {"description": config.description, "prompt": config.system_prompt}}
+    agent_definition = {config.action_name: {"description": config.description, "prompt": config.system_prompt}}
 
     cmd = [
         "claude",
@@ -38,7 +38,7 @@ def _run_claude(prompt: str, config: AgentConfig, *, cwd: Path | None = None) ->
         json.dumps(agent_definition),
     ]
 
-    logger.info("Requesting '%s' from Claude Code ...", config.agent_name)
+    logger.info("Requesting '%s' action from Claude Code ...", config.action_name)
     result = subprocess.run(  # noqa: S603
         cmd,
         text=True,

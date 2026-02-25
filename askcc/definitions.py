@@ -215,7 +215,7 @@ DEVELOP_USER_PROMPT_TEMPLATE = (
 
 @dataclass(frozen=True)
 class AgentConfig:
-    agent_name: str
+    action_name: str
     description: str
     system_prompt: str
     user_prompt_template: str
@@ -234,7 +234,7 @@ class AgentType(StrEnum):
 
 AGENT_CONFIGS: dict[AgentType, AgentConfig] = {
     AgentType.PLAN: AgentConfig(
-        agent_name="planner",
+        action_name="planner",
         description="Plans implementation for given issue",
         system_prompt=PLAN_AGENT_PROMPT,
         user_prompt_template=PLAN_USER_PROMPT_TEMPLATE,
@@ -243,7 +243,7 @@ AGENT_CONFIGS: dict[AgentType, AgentConfig] = {
         required_variables=("issue_content",),
     ),
     AgentType.DEVELOP: AgentConfig(
-        agent_name="developer",
+        action_name="developer",
         description="Develops a planned/defined issue",
         system_prompt=DEVELOP_AGENT_PROMPT,
         user_prompt_template=DEVELOP_USER_PROMPT_TEMPLATE,
@@ -252,7 +252,7 @@ AGENT_CONFIGS: dict[AgentType, AgentConfig] = {
         required_variables=("issue_content",),
     ),
     AgentType.REVIEW: AgentConfig(
-        agent_name="reviewer",
+        action_name="reviewer",
         description="Reviews a GitHub issue for clarity, completeness, and feasibility",
         system_prompt=REVIEW_AGENT_PROMPT,
         user_prompt_template=REVIEW_USER_PROMPT_TEMPLATE,
@@ -261,7 +261,7 @@ AGENT_CONFIGS: dict[AgentType, AgentConfig] = {
         required_variables=("issue_content",),
     ),
     AgentType.EXPLORE: AgentConfig(
-        agent_name="explorer",
+        action_name="explorer",
         description="Investigates a GitHub issue and proposes best-practice solutions",
         system_prompt=EXPLORE_AGENT_PROMPT,
         user_prompt_template=EXPLORE_USER_PROMPT_TEMPLATE,
@@ -270,7 +270,7 @@ AGENT_CONFIGS: dict[AgentType, AgentConfig] = {
         required_variables=("issue_content",),
     ),
     AgentType.DIAGNOSE: AgentConfig(
-        agent_name="diagnostician",
+        action_name="diagnostician",
         description="Investigates a reported issue and identifies potential causes",
         system_prompt=DIAGNOSE_AGENT_PROMPT,
         user_prompt_template=DIAGNOSE_USER_PROMPT_TEMPLATE,

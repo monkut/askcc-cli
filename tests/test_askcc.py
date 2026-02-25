@@ -11,8 +11,8 @@ import pytest
 if TYPE_CHECKING:
     from pathlib import Path
 
-from askcc.cli import _run_claude
-from askcc.definitions import AGENT_CONFIGS, AgentAction, AgentConfig
+from askcc.cli import _run_claude, main
+from askcc.definitions import AGENT_CONFIGS, AgentAction, AgentConfig, SupportedLanguage
 from askcc.functions import (
     _parse_issue_url,
     append_usage_to_last_comment,
@@ -336,3 +336,32 @@ class TestAppendUsageToLastComment:
         body_arg = patch_call[0][0][-1]
         expected = f"body={original_body}\n\n:tokens-used: input: 200, output: 100"
         assert body_arg == expected
+
+
+class TestLanguageOption:
+    ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/1"
+
+    def _run_main(self, extra_args: list[str]) -> str:
+        """Run main() with given args and return the prompt passed to _run_claude."""
+        with (
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.validate_issue_labels", return_value=[]),
+            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
+            patch("askcc.cli._run_claude", return_value=(0, None)) as mock_claude,
+            patch("sys.argv", ["askcc", *extra_args, AgentAction.PLAN, "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit),
+        ):
+            main()
+        return mock_claude.call_args[0][0]
+
+    def test_japanese_appends_instruction(self):
+        prompt = self._run_main(["--language", SupportedLanguage.JAPANESE])
+        assert prompt.endswith(f"\nOutput all comments in {SupportedLanguage.JAPANESE}.")
+
+    def test_english_no_append(self):
+        prompt = self._run_main(["--language", SupportedLanguage.ENGLISH])
+        assert "Output all comments in" not in prompt
+
+    def test_default_no_append(self):
+        prompt = self._run_main([])
+        assert "Output all comments in" not in prompt

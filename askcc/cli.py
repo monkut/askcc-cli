@@ -7,7 +7,7 @@ from pathlib import Path
 from string import Template
 
 from . import __version__
-from .definitions import AgentAction, AgentConfig
+from .definitions import AgentAction, AgentConfig, SupportedLanguage
 from .functions import (
     append_usage_to_last_comment,
     bootstrap_templates,
@@ -94,6 +94,13 @@ def main() -> None:
         default=False,
         help="Bypass issue label verification.",
     )
+    parser.add_argument(
+        "-l",
+        "--language",
+        choices=[lang.value for lang in SupportedLanguage],
+        default=SupportedLanguage.ENGLISH,
+        help="Language for agent output comments (default: english).",
+    )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -141,6 +148,8 @@ def main() -> None:
     config = load_agent_config(agent)
     issue_content = fetch_github_issue(args.github_issue_url)
     prompt = Template(config.user_prompt_template).safe_substitute(issue_content=issue_content)
+    if args.language != SupportedLanguage.ENGLISH:
+        prompt += f"\nOutput all comments in {args.language}."
     logger.info("Prompt prepared for '%s' command", agent.value)
     return_code, usage = _run_claude(prompt, config=config, cwd=args.cwd)
 

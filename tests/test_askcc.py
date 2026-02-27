@@ -17,6 +17,7 @@ from askcc.functions import (
     _parse_issue_url,
     append_usage_to_last_comment,
     bootstrap_templates,
+    install_skills,
     load_agent_config,
     load_template,
     validate_template,
@@ -365,3 +366,75 @@ class TestLanguageOption:
     def test_default_no_append(self):
         prompt = self._run_main([])
         assert "Output all comments in" not in prompt
+
+
+class TestInstallSkills:
+    def test_explicit_directory(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        target = tmp_path / "custom-skills"
+        target.mkdir()
+        install_skills(directory=target)
+
+        installed = [d.name for d in target.iterdir() if d.is_dir()]
+        assert "request-askcc" in installed
+
+    def test_auto_detect_claude_only(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        claude_home = tmp_path / ".claude"
+        claude_home.mkdir()
+        monkeypatch.setattr("askcc.functions.CLAUDE_HOME", claude_home)
+        monkeypatch.setattr("askcc.functions.CLAUDE_SKILLS_DIR", claude_home / "skills")
+        monkeypatch.setattr("askcc.functions.OPENCLAW_HOME", tmp_path / ".openclaw")
+
+        install_skills()
+
+        installed = [d.name for d in (claude_home / "skills").iterdir() if d.is_dir()]
+        assert "request-askcc" in installed
+
+    def test_auto_detect_openclaw_only(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        openclaw_home = tmp_path / ".openclaw"
+        openclaw_home.mkdir()
+        config_path = openclaw_home / "openclaw.json"
+        config_path.write_text("{}")
+        skills_dir = openclaw_home / "workspace" / "skills"
+
+        monkeypatch.setattr("askcc.functions.CLAUDE_HOME", tmp_path / ".claude")
+        monkeypatch.setattr("askcc.functions.OPENCLAW_HOME", openclaw_home)
+        monkeypatch.setattr("askcc.functions.OPENCLAW_SKILLS_DIR", skills_dir)
+        monkeypatch.setattr("askcc.functions.OPENCLAW_CONFIG_PATH", config_path)
+
+        install_skills()
+
+        installed = [d.name for d in skills_dir.iterdir() if d.is_dir()]
+        assert "request-askcc" in installed
+        config = json.loads(config_path.read_text())
+        assert config["skills"]["entries"]["request-askcc"]["enabled"] is True
+
+    def test_auto_detect_both(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        claude_home = tmp_path / ".claude"
+        claude_home.mkdir()
+        openclaw_home = tmp_path / ".openclaw"
+        openclaw_home.mkdir()
+        config_path = openclaw_home / "openclaw.json"
+        config_path.write_text("{}")
+        skills_dir = openclaw_home / "workspace" / "skills"
+
+        monkeypatch.setattr("askcc.functions.CLAUDE_HOME", claude_home)
+        monkeypatch.setattr("askcc.functions.CLAUDE_SKILLS_DIR", claude_home / "skills")
+        monkeypatch.setattr("askcc.functions.OPENCLAW_HOME", openclaw_home)
+        monkeypatch.setattr("askcc.functions.OPENCLAW_SKILLS_DIR", skills_dir)
+        monkeypatch.setattr("askcc.functions.OPENCLAW_CONFIG_PATH", config_path)
+
+        install_skills()
+
+        assert (claude_home / "skills" / "request-askcc").is_dir()
+        assert (skills_dir / "request-askcc").is_dir()
+
+    def test_auto_detect_neither(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ):
+        monkeypatch.setattr("askcc.functions.CLAUDE_HOME", tmp_path / ".claude")
+        monkeypatch.setattr("askcc.functions.OPENCLAW_HOME", tmp_path / ".openclaw")
+
+        with caplog.at_level("WARNING", logger="askcc.functions"):
+            install_skills()
+
+        assert "No target directories found" in caplog.text

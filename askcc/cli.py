@@ -48,7 +48,7 @@ def _run_claude(
         capture_output=True,
         cwd=cwd,
     )
-    logger.info("Claude Code finished (exit code: %d)", result.returncode)
+    logger.info("Claude Code finished %s (exit code: %d)", issue_url, result.returncode)
 
     usage = None
     if result.stdout:

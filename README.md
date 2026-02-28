@@ -43,7 +43,7 @@ askcc install [--directory DIR]
 | `review`   | Fetch the issue and run Claude in review mode (issue quality review)     |
 | `explore`  | Fetch the issue and run Claude in explore mode (investigate and propose solutions) |
 | `diagnose` | Fetch the issue and run Claude in diagnose mode (root cause analysis)    |
-| `install`  | Install bundled skills to the agent workspace                            |
+| `install`  | Install bundled skills to `~/.claude/skills` and/or `~/.openclaw/workspace/skills` |
 
 ### Options
 
@@ -51,7 +51,7 @@ askcc install [--directory DIR]
 |----------------------|----------------------------------------------------------|
 | `--github-issue-url` | **(required)** GitHub issue URL to process               |
 | `--cwd`              | Working directory for the Claude subprocess (default: cwd) |
-| `--directory`        | Target directory for skills (`install` command only)       |
+| `--directory`        | Override auto-detection and install skills to this directory (`install` only) |
 | `--version`          | Show version                                             |
 
 ### Environment Variables
@@ -103,6 +103,19 @@ Develop an issue in a specific project directory:
 ```bash
 askcc --cwd /path/to/project develop --github-issue-url https://github.com/monkut/askcc-cli/issues/1
 ```
+
+Install bundled skills:
+
+```bash
+askcc install
+```
+
+The `install` command auto-detects which agent platforms are available:
+
+- **`~/.claude`** — copies skills to `~/.claude/skills/` (auto-discovered by Claude Code)
+- **`~/.openclaw`** — copies skills to `~/.openclaw/workspace/skills/` and registers them in `openclaw.json`
+
+Both targets are installed if both directories exist. Use `--directory` to override auto-detection and install to a specific path.
 
 ## Project Structure
 

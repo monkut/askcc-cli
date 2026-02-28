@@ -126,7 +126,7 @@ def main() -> None:
         "--directory",
         type=Path,
         default=None,
-        help="Target directory for skills (defaults to ~/.openclaw/workspace/skills).",
+        help="Target directory for skills (overrides auto-detection of ~/.claude and ~/.openclaw).",
     )
 
     args = parser.parse_args()

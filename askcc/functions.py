@@ -99,16 +99,17 @@ def validate_issue_labels(github_issue_url: str) -> list[str]:
     return errors
 
 
-DEFAULT_SKILLS_DIR = Path.home() / ".openclaw" / "workspace" / "skills"
-OPENCLAW_CONFIG_PATH = Path.home() / ".openclaw" / "openclaw.json"
+CLAUDE_HOME = Path.home() / ".claude"
+CLAUDE_SKILLS_DIR = CLAUDE_HOME / "skills"
+OPENCLAW_HOME = Path.home() / ".openclaw"
+OPENCLAW_SKILLS_DIR = OPENCLAW_HOME / "workspace" / "skills"
+OPENCLAW_CONFIG_PATH = OPENCLAW_HOME / "openclaw.json"
 
 
-def install_skills(directory: Path | None = None) -> None:
-    """Copy bundled skills to the target directory and register them in openclaw.json."""
-    target_dir = directory or DEFAULT_SKILLS_DIR
+def _copy_skills(target_dir: Path) -> list[str]:
+    """Copy bundled skill directories to target_dir. Returns list of installed skill names."""
     skills_source = package_files("askcc") / "skills"
-
-    # Copy each skill directory
+    installed = []
     for skill_dir in sorted(skills_source.iterdir(), key=lambda p: p.name):
         if not skill_dir.is_dir() or skill_dir.name.startswith("__"):
             continue
@@ -117,9 +118,35 @@ def install_skills(directory: Path | None = None) -> None:
             shutil.rmtree(dest)
         shutil.copytree(str(skill_dir), dest)
         logger.info("Installed skill '%s' to %s", skill_dir.name, dest)
+        installed.append(skill_dir.name)
+    return installed
 
-        # Register in openclaw.json
-        _register_skill(skill_dir.name)
+
+def install_skills(directory: Path | None = None) -> None:
+    """Copy bundled skills to detected target directories.
+
+    When --directory is given, install only there.
+    Otherwise auto-detect ~/.claude and ~/.openclaw and install to whichever exist.
+    """
+    if directory:
+        _copy_skills(directory)
+        return
+
+    targets_found = False
+
+    if CLAUDE_HOME.is_dir():
+        targets_found = True
+        CLAUDE_SKILLS_DIR.mkdir(parents=True, exist_ok=True)
+        _copy_skills(CLAUDE_SKILLS_DIR)
+
+    if OPENCLAW_HOME.is_dir():
+        targets_found = True
+        OPENCLAW_SKILLS_DIR.mkdir(parents=True, exist_ok=True)
+        for name in _copy_skills(OPENCLAW_SKILLS_DIR):
+            _register_skill(name)
+
+    if not targets_found:
+        logger.warning("No target directories found (~/.claude or ~/.openclaw). Skipping skill installation.")
 
 
 def _register_skill(skill_name: str) -> None:

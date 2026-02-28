@@ -245,7 +245,9 @@ class TestRunClaude:
             caplog.at_level("INFO", logger="askcc.cli"),
             patch("askcc.cli.subprocess.run", return_value=mock_result) as mock_run,
         ):
-            exit_code, usage = _run_claude("test prompt", config=agent_config)
+            exit_code, usage = _run_claude(
+                "test prompt", config=agent_config, issue_url="https://github.com/test/repo/issues/1"
+            )
 
         assert exit_code == 0
         assert usage == {"input_tokens": 1500, "output_tokens": 300}
@@ -261,7 +263,9 @@ class TestRunClaude:
         mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="not json", stderr="")
 
         with patch("askcc.cli.subprocess.run", return_value=mock_result):
-            exit_code, usage = _run_claude("test prompt", config=agent_config)
+            exit_code, usage = _run_claude(
+                "test prompt", config=agent_config, issue_url="https://github.com/test/repo/issues/1"
+            )
 
         assert exit_code == 0
         assert usage is None
@@ -273,7 +277,9 @@ class TestRunClaude:
         mock_result = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="error occurred")
 
         with patch("askcc.cli.subprocess.run", return_value=mock_result):
-            exit_code, usage = _run_claude("test prompt", config=agent_config)
+            exit_code, usage = _run_claude(
+                "test prompt", config=agent_config, issue_url="https://github.com/test/repo/issues/1"
+            )
 
         assert exit_code == 1
         assert usage is None
@@ -283,7 +289,9 @@ class TestRunClaude:
         mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=claude_response, stderr="")
 
         with patch("askcc.cli.subprocess.run", return_value=mock_result):
-            exit_code, usage = _run_claude("test prompt", config=agent_config)
+            exit_code, usage = _run_claude(
+                "test prompt", config=agent_config, issue_url="https://github.com/test/repo/issues/1"
+            )
 
         assert exit_code == 0
         assert usage is None

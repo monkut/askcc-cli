@@ -23,7 +23,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_PERMISSION_MODE = "acceptEdits"
 
 
-def _run_claude(prompt: str, config: AgentConfig, *, cwd: Path | None = None) -> tuple[int, dict | None]:
+def _run_claude(
+    prompt: str, config: AgentConfig, *, issue_url: str, cwd: Path | None = None
+) -> tuple[int, dict | None]:
     """Run claude CLI with the given prompt, capturing JSON output for token usage reporting."""
     agent_definition = {config.action_name: {"description": config.description, "prompt": config.system_prompt}}
 
@@ -38,7 +40,7 @@ def _run_claude(prompt: str, config: AgentConfig, *, cwd: Path | None = None) ->
         json.dumps(agent_definition),
     ]
 
-    logger.info("Requesting '%s' action from Claude Code ...", config.action_name)
+    logger.info("Requesting '%s' action for %s from Claude Code ...", config.action_name, issue_url)
     result = subprocess.run(  # noqa: S603
         cmd,
         text=True,
@@ -151,7 +153,7 @@ def main() -> None:
     if args.language != SupportedLanguage.ENGLISH:
         prompt += f"\nOutput all comments in {args.language}."
     logger.info("Prompt prepared for '%s' command", agent.value)
-    return_code, usage = _run_claude(prompt, config=config, cwd=args.cwd)
+    return_code, usage = _run_claude(prompt, config=config, issue_url=args.github_issue_url, cwd=args.cwd)
 
     if usage:
         append_usage_to_last_comment(args.github_issue_url, usage)

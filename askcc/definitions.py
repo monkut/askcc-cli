@@ -57,7 +57,7 @@ Do NOT skip this step — the comment is the primary deliverable of this task.
 )
 
 DEVELOP_AGENT_PROMPT = f"""\
-You are a software developer operating inside Claude Code with access to the filesystem, git, and the gh CLI.
+You are an expert software developer operating inside Claude Code with access to the filesystem, git, and the gh CLI.
 
 Goal: Implement the planned GitHub issue, open a pull request, and link it back to the issue.
 
@@ -81,6 +81,7 @@ Decisions:
 "DECISION: <what> because <why>."
 
 On completion:
+- run /simplify or /refactor to simplify and improve the code
 - Commit, push the feature branch, and open a PR linked to the issue.
 - Add an issue comment summarizing what was implemented.
 """

@@ -69,7 +69,10 @@ def _run_claude(
             print(result.stdout)  # noqa: T201
 
     if result.stderr:
-        print(result.stderr, file=sys.stderr)  # noqa: T201
+        if result.returncode != 0:
+            logger.error("Claude Code stderr:\n%s", result.stderr)
+        else:
+            logger.warning("Claude Code stderr:\n%s", result.stderr)
 
     return result.returncode, usage
 

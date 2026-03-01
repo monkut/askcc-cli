@@ -12,6 +12,7 @@ from .functions import (
     append_usage_to_last_comment,
     bootstrap_templates,
     fetch_github_issue,
+    fetch_github_pr,
     install_skills,
     load_agent_config,
     validate_issue_labels,
@@ -126,6 +127,9 @@ def main() -> None:
     diagnose_parser = subparsers.add_parser("diagnose", help="Run Claude in diagnose mode (root cause analysis).")
     diagnose_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL to diagnose.")
 
+    review_pr_parser = subparsers.add_parser("review-pr", help="Run Claude in PR review mode (automated code review).")
+    review_pr_parser.add_argument("-g", "--github-pr-url", required=True, help="GitHub PR URL to review.")
+
     install_parser = subparsers.add_parser("install", help="Install bundled skills to the agent workspace.")
     install_parser.add_argument(
         "--directory",
@@ -142,24 +146,31 @@ def main() -> None:
 
     bootstrap_templates()
 
-    if not args.ignore_labels:
-        label_errors = validate_issue_labels(args.github_issue_url)
-        if label_errors:
-            for error in label_errors:
-                logger.error(error)
-            sys.exit(1)
-
     agent = AgentAction(args.command)
     config = load_agent_config(agent)
-    issue_content = fetch_github_issue(args.github_issue_url)
-    prompt = Template(config.user_prompt_template).safe_substitute(issue_content=issue_content)
+
+    if agent == AgentAction.REVIEW_PR:
+        pr_content = fetch_github_pr(args.github_pr_url)
+        prompt = Template(config.user_prompt_template).safe_substitute(pr_content=pr_content)
+        target_url = args.github_pr_url
+    else:
+        if not args.ignore_labels:
+            label_errors = validate_issue_labels(args.github_issue_url)
+            if label_errors:
+                for error in label_errors:
+                    logger.error(error)
+                sys.exit(1)
+        issue_content = fetch_github_issue(args.github_issue_url)
+        prompt = Template(config.user_prompt_template).safe_substitute(issue_content=issue_content)
+        target_url = args.github_issue_url
+
     if args.language != SupportedLanguage.ENGLISH:
         prompt += f"\nOutput all comments in {args.language}."
     logger.info("Prompt prepared for '%s' command", agent.value)
-    return_code, usage = _run_claude(prompt, config=config, issue_url=args.github_issue_url, cwd=args.cwd)
+    return_code, usage = _run_claude(prompt, config=config, issue_url=target_url, cwd=args.cwd)
 
     if usage:
-        append_usage_to_last_comment(args.github_issue_url, usage)
+        append_usage_to_last_comment(target_url, usage)
 
     sys.exit(return_code)
 

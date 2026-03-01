@@ -13,20 +13,33 @@ from .settings import ENABLE_ISSUE_LABEL_PREFIX_VALIDATION, REQUIRED_ISSUE_LABEL
 
 logger = logging.getLogger(__name__)
 
-MIN_ISSUE_URL_PARTS = 4
+MIN_URL_PARTS = 4
 
 
 def _parse_issue_url(github_issue_url: str) -> tuple[str, str, int]:
     """Parse a GitHub issue URL into (owner, repo, issue_number)."""
     parsed = urlparse(github_issue_url)
     parts = parsed.path.strip("/").split("/")
-    if len(parts) < MIN_ISSUE_URL_PARTS or parts[2] != "issues":
+    if len(parts) < MIN_URL_PARTS or parts[2] != "issues":
         msg = f"Invalid GitHub issue URL: {github_issue_url}"
         raise ValueError(msg)
     owner = parts[0]
     repo = parts[1]
     issue_number = int(parts[3])
     return owner, repo, issue_number
+
+
+def _parse_pr_url(github_pr_url: str) -> tuple[str, str, int]:
+    """Parse a GitHub pull request URL into (owner, repo, pr_number)."""
+    parsed = urlparse(github_pr_url)
+    parts = parsed.path.strip("/").split("/")
+    if len(parts) < MIN_URL_PARTS or parts[2] != "pull":
+        msg = f"Invalid GitHub PR URL: {github_pr_url}"
+        raise ValueError(msg)
+    owner = parts[0]
+    repo = parts[1]
+    pr_number = int(parts[3])
+    return owner, repo, pr_number
 
 
 def _require_gh_cli() -> str:
@@ -68,6 +81,47 @@ def fetch_github_issue(github_issue_url: str) -> str:
     if comment_texts:
         sections.append("Comments:\n" + "\n---\n".join(comment_texts))
     logger.info("Fetched issue with %d comment(s)", len(comment_texts))
+
+    return "\n\n".join(sections)
+
+
+def fetch_github_pr(github_pr_url: str) -> str:
+    """Fetch a GitHub PR description, metadata, and review comments, combined into a single string."""
+    gh = _require_gh_cli()
+    owner, repo, pr_number = _parse_pr_url(github_pr_url)
+    repo_nwo = f"{owner}/{repo}"
+    logger.info("Fetching PR #%d from %s ...", pr_number, repo_nwo)
+
+    pr_result = subprocess.run(  # noqa: S603
+        [
+            gh,
+            "api",
+            f"repos/{repo_nwo}/pulls/{pr_number}",
+            "--jq",
+            ".title, .body, .head.ref, .base.ref",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    pr_text = pr_result.stdout.strip()
+
+    logger.info("Fetching review comments for PR #%d ...", pr_number)
+    comments_result = subprocess.run(  # noqa: S603
+        [gh, "api", "--paginate", f"repos/{repo_nwo}/pulls/{pr_number}/comments"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    comments_data = json.loads(comments_result.stdout)
+    comment_texts = [
+        f"Review comment by @{c['user']['login']} on {c.get('path', '')}:\n{c['body']}" for c in comments_data
+    ]
+
+    sections = [f"PR URL: {github_pr_url}\n\nPR #{pr_number}:\n{pr_text}"]
+    if comment_texts:
+        sections.append("Review Comments:\n" + "\n---\n".join(comment_texts))
+    logger.info("Fetched PR with %d review comment(s)", len(comment_texts))
 
     return "\n\n".join(sections)
 

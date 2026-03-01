@@ -195,6 +195,48 @@ DIAGNOSE_USER_PROMPT_TEMPLATE = (
     "\n\n$issue_content"
 )
 
+REVIEW_PR_AGENT_PROMPT = """\
+You are an expert code reviewer operating inside Claude Code with access to the filesystem, git, and the gh CLI.
+
+Goal: Review the given GitHub pull request for code quality, correctness, and adherence to project standards, \
+then post actionable feedback as a PR review.
+
+Before reviewing, read the project's conventions, existing tests, and configuration to understand the standards. \
+Do not speculate about code you have not opened.
+
+Steps:
+1. Fetch the PR diff using `gh pr diff <number>`.
+2. Check out the PR branch locally using `gh pr checkout <number>`.
+3. Read each changed file in full to understand context beyond the diff.
+4. Run the project's test suite if a test runner is configured.
+
+Evaluate the PR against these criteria:
+1. **Correctness** — Does the code do what the PR description claims? Are there logic errors or edge cases?
+2. **Tests** — Are new or changed behaviors covered by tests? Do existing tests still pass?
+3. **Style & conventions** — Does the code follow the project's established patterns and linting rules?
+4. **Security** — Are there potential vulnerabilities (injection, auth bypass, secrets exposure)?
+5. **Performance** — Are there obvious inefficiencies or regressions?
+6. **Documentation** — Are public APIs, config changes, or behavioral changes documented?
+
+Your review must:
+- Start with a one-paragraph summary of what the PR does and your overall assessment.
+- List specific findings organized by file, each with line references and a concrete suggestion.
+- Distinguish between blocking issues ("must fix") and suggestions ("consider").
+- End with a clear verdict: "Approve", "Request changes", or "Comment only".
+
+Post your review using `gh pr review <number>` with the appropriate flag \
+(--approve, --request-changes, or --comment) and --body containing your full review.
+
+IMPORTANT: You MUST post your review on the GitHub PR using the gh CLI. \
+Do NOT skip this step — the review is the primary deliverable of this task.
+"""
+
+REVIEW_PR_USER_PROMPT_TEMPLATE = (
+    "Review the following GitHub pull request for code quality, correctness, and adherence to project standards."
+    " You MUST post your review on the GitHub PR using the gh CLI."
+    "\n\n$pr_content"
+)
+
 REVIEW_USER_PROMPT_TEMPLATE = (
     "Review the following GitHub issue for clarity, completeness, and feasibility."
     " You MUST post your complete review as a comment on the GitHub issue using the gh CLI."
@@ -234,6 +276,7 @@ class AgentAction(StrEnum):
     PLAN = "plan"
     DEVELOP = "develop"
     REVIEW = "review"
+    REVIEW_PR = "review-pr"
     EXPLORE = "explore"
     DIAGNOSE = "diagnose"
 
@@ -283,5 +326,14 @@ AGENT_CONFIGS: dict[AgentAction, AgentConfig] = {
         system_prompt_file="DIAGNOSE_SYSTEM_PROMPT.md",
         user_prompt_file="DIAGNOSE_USER_PROMPT.md",
         required_variables=("issue_content",),
+    ),
+    AgentAction.REVIEW_PR: AgentConfig(
+        action_name="review-pr",
+        description="Reviews a GitHub pull request for code quality and correctness",
+        system_prompt=REVIEW_PR_AGENT_PROMPT,
+        user_prompt_template=REVIEW_PR_USER_PROMPT_TEMPLATE,
+        system_prompt_file="REVIEW_PR_SYSTEM_PROMPT.md",
+        user_prompt_file="REVIEW_PR_USER_PROMPT.md",
+        required_variables=("pr_content",),
     ),
 }

@@ -15,6 +15,7 @@ from askcc.cli import _run_claude, main
 from askcc.definitions import AGENT_CONFIGS, AgentAction, AgentConfig, SupportedLanguage
 from askcc.functions import (
     _parse_issue_url,
+    _parse_pr_url,
     append_usage_to_last_comment,
     bootstrap_templates,
     install_skills,
@@ -46,6 +47,28 @@ class TestParseIssueUrl:
         assert issue_number == 7
 
 
+class TestParsePrUrl:
+    def test_valid_pr_url(self):
+        owner, repo, pr_number = _parse_pr_url("https://github.com/monkut/askcc-cli/pull/5")
+        assert owner == "monkut"
+        assert repo == "askcc-cli"
+        assert pr_number == 5
+
+    def test_invalid_url_missing_pull_segment(self):
+        with pytest.raises(ValueError):
+            _parse_pr_url("https://github.com/monkut/askcc-cli/issues/1")
+
+    def test_invalid_url_too_few_parts(self):
+        with pytest.raises(ValueError):
+            _parse_pr_url("https://github.com/monkut")
+
+    def test_valid_url_with_trailing_slash(self):
+        owner, repo, pr_number = _parse_pr_url("https://github.com/monkut/askcc-cli/pull/10/")
+        assert owner == "monkut"
+        assert repo == "askcc-cli"
+        assert pr_number == 10
+
+
 EXPECTED_TEMPLATE_FILES = {
     "PLAN_SYSTEM_PROMPT.md",
     "PLAN_USER_PROMPT.md",
@@ -53,6 +76,8 @@ EXPECTED_TEMPLATE_FILES = {
     "DEVELOP_USER_PROMPT.md",
     "REVIEW_SYSTEM_PROMPT.md",
     "REVIEW_USER_PROMPT.md",
+    "REVIEW_PR_SYSTEM_PROMPT.md",
+    "REVIEW_PR_USER_PROMPT.md",
     "EXPLORE_SYSTEM_PROMPT.md",
     "EXPLORE_USER_PROMPT.md",
     "DIAGNOSE_SYSTEM_PROMPT.md",
@@ -191,6 +216,16 @@ class TestLoadAgentConfig:
         config = load_agent_config(AgentAction.DIAGNOSE)
         assert config.action_name == "diagnose"
         assert config.description == "Investigates a reported issue and identifies potential causes"
+
+    def test_load_review_pr_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        templates_dir = tmp_path / "templates"
+        monkeypatch.setattr("askcc.functions.TEMPLATES_DIR", templates_dir)
+        bootstrap_templates()
+
+        config = load_agent_config(AgentAction.REVIEW_PR)
+        assert config.action_name == "review-pr"
+        assert config.description == "Reviews a GitHub pull request for code quality and correctness"
+        assert config.required_variables == ("pr_content",)
 
     def test_raises_on_missing_required_variable(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         templates_dir = tmp_path / "templates"
@@ -345,6 +380,50 @@ class TestAppendUsageToLastComment:
         body_arg = patch_call[0][0][-1]
         expected = f"body={original_body}\n\n:tokens-used: input: 200, output: 100"
         assert body_arg == expected
+
+
+class TestReviewPrCommand:
+    PR_URL = "https://github.com/monkut/askcc-cli/pull/5"
+
+    def test_review_pr_calls_fetch_github_pr(self):
+        with (
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.fetch_github_pr", return_value="pr body") as mock_fetch_pr,
+            patch("askcc.cli._run_claude", return_value=(0, None)) as mock_claude,
+            patch("sys.argv", ["askcc", "review-pr", "-g", self.PR_URL]),
+            pytest.raises(SystemExit),
+        ):
+            main()
+
+        mock_fetch_pr.assert_called_once_with(self.PR_URL)
+        prompt = mock_claude.call_args[0][0]
+        assert "pr body" in prompt
+
+    def test_review_pr_skips_label_validation(self):
+        with (
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.fetch_github_pr", return_value="pr body"),
+            patch("askcc.cli.validate_issue_labels") as mock_validate,
+            patch("askcc.cli._run_claude", return_value=(0, None)),
+            patch("sys.argv", ["askcc", "review-pr", "-g", self.PR_URL]),
+            pytest.raises(SystemExit),
+        ):
+            main()
+
+        mock_validate.assert_not_called()
+
+    def test_review_pr_with_language(self):
+        with (
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.fetch_github_pr", return_value="pr body"),
+            patch("askcc.cli._run_claude", return_value=(0, None)) as mock_claude,
+            patch("sys.argv", ["askcc", "--language", "japanese", "review-pr", "-g", self.PR_URL]),
+            pytest.raises(SystemExit),
+        ):
+            main()
+
+        prompt = mock_claude.call_args[0][0]
+        assert prompt.endswith("\nOutput all comments in japanese.")
 
 
 class TestLanguageOption:

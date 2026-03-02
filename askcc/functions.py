@@ -129,24 +129,21 @@ def install_skills(directory: Path | None = None) -> None:
     Otherwise auto-detect ~/.claude and ~/.openclaw and install to whichever exist.
     """
     if directory:
-        _copy_skills(directory)
+        _copy_skills(directory.expanduser())
         return
 
-    targets_found = False
-
     if CLAUDE_HOME.is_dir():
-        targets_found = True
         CLAUDE_SKILLS_DIR.mkdir(parents=True, exist_ok=True)
         _copy_skills(CLAUDE_SKILLS_DIR)
+    else:
+        logger.warning("Target directory not found: %s. Skipping skill installation.", CLAUDE_HOME)
 
     if OPENCLAW_HOME.is_dir():
-        targets_found = True
         OPENCLAW_SKILLS_DIR.mkdir(parents=True, exist_ok=True)
         for name in _copy_skills(OPENCLAW_SKILLS_DIR):
             _register_skill(name)
-
-    if not targets_found:
-        logger.warning("No target directories found (~/.claude or ~/.openclaw). Skipping skill installation.")
+    else:
+        logger.warning("Target directory not found: %s. Skipping skill installation.", OPENCLAW_HOME)
 
 
 def _register_skill(skill_name: str) -> None:

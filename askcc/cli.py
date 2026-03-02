@@ -36,6 +36,7 @@ def _run_claude(
         "--output-format",
         "json",
         "--dangerously-skip-permissions",
+        "--worktree",
         "--agents",
         json.dumps(agent_definition),
     ]
@@ -59,8 +60,12 @@ def _run_claude(
                 print(response_text)  # noqa: T201
             usage = data.get("usage")
             if usage:
+                model = data.get("model")
+                if model:
+                    usage["model"] = model
                 logger.info(
-                    "Token usage — input: %s, output: %s",
+                    "Token usage — model: %s, input: %s, output: %s",
+                    usage.get("model", "N/A"),
                     usage.get("input_tokens", "N/A"),
                     usage.get("output_tokens", "N/A"),
                 )

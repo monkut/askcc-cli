@@ -236,6 +236,7 @@ class TestRunClaude:
         claude_response = json.dumps(
             {
                 "result": "Here is the plan.",
+                "model": "claude-sonnet-4-6-20250514",
                 "usage": {"input_tokens": 1500, "output_tokens": 300},
             }
         )
@@ -250,9 +251,10 @@ class TestRunClaude:
             )
 
         assert exit_code == 0
-        assert usage == {"input_tokens": 1500, "output_tokens": 300}
+        assert usage == {"input_tokens": 1500, "output_tokens": 300, "model": "claude-sonnet-4-6-20250514"}
         captured = capfd.readouterr()
         assert "Here is the plan." in captured.out
+        assert "model: claude-sonnet-4-6-20250514" in caplog.text
         assert "input: 1500" in caplog.text
         assert "output: 300" in caplog.text
         mock_run.assert_called_once()
@@ -309,12 +311,14 @@ class TestAppendUsageToLastComment:
             patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
             patch("askcc.functions.subprocess.run", side_effect=[get_result, patch_result]) as mock_run,
         ):
-            append_usage_to_last_comment(self.ISSUE_URL, {"input_tokens": 1500, "output_tokens": 300})
+            append_usage_to_last_comment(
+                self.ISSUE_URL, {"model": "claude-sonnet-4-6-20250514", "input_tokens": 1500, "output_tokens": 300}
+            )
 
         assert mock_run.call_count == 2
         patch_call = mock_run.call_args_list[1]
         body_arg = patch_call[0][0][-1]
-        assert ":tokens-used: input: 1500, output: 300" in body_arg
+        assert ":tokens-used: model: claude-sonnet-4-6-20250514, input: 1500, output: 300" in body_arg
 
     def test_noop_when_no_comments(self, caplog: pytest.LogCaptureFixture):
         get_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="null", stderr="")
@@ -324,7 +328,9 @@ class TestAppendUsageToLastComment:
             patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
             patch("askcc.functions.subprocess.run", return_value=get_result) as mock_run,
         ):
-            append_usage_to_last_comment(self.ISSUE_URL, {"input_tokens": 100, "output_tokens": 50})
+            append_usage_to_last_comment(
+                self.ISSUE_URL, {"model": "claude-sonnet-4-6-20250514", "input_tokens": 100, "output_tokens": 50}
+            )
 
         mock_run.assert_called_once()
         assert "No comments found" in caplog.text
@@ -339,11 +345,13 @@ class TestAppendUsageToLastComment:
             patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
             patch("askcc.functions.subprocess.run", side_effect=[get_result, patch_result]) as mock_run,
         ):
-            append_usage_to_last_comment(self.ISSUE_URL, {"input_tokens": 200, "output_tokens": 100})
+            append_usage_to_last_comment(
+                self.ISSUE_URL, {"model": "claude-sonnet-4-6-20250514", "input_tokens": 200, "output_tokens": 100}
+            )
 
         patch_call = mock_run.call_args_list[1]
         body_arg = patch_call[0][0][-1]
-        expected = f"body={original_body}\n\n:tokens-used: input: 200, output: 100"
+        expected = f"body={original_body}\n\n:tokens-used: model: claude-sonnet-4-6-20250514, input: 200, output: 100"
         assert body_arg == expected
 
 
@@ -445,4 +453,4 @@ class TestInstallSkills:
         with caplog.at_level("WARNING", logger="askcc.functions"):
             install_skills()
 
-        assert "No target directories found" in caplog.text
+        assert caplog.text.count("Target directory not found") == 2

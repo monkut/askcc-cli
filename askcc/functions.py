@@ -224,9 +224,10 @@ def append_usage_to_last_comment(github_issue_url: str, usage: dict) -> None:
     comment_id = comment["id"]
     existing_body = comment["body"]
 
+    model = usage.get("model", "N/A")
     input_tokens = usage.get("input_tokens", "N/A")
     output_tokens = usage.get("output_tokens", "N/A")
-    usage_line = f"\n\n:tokens-used: input: {input_tokens}, output: {output_tokens}"
+    usage_line = f"\n\n:tokens-used: model: {model}, input: {input_tokens}, output: {output_tokens}"
     updated_body = existing_body + usage_line
 
     subprocess.run(  # noqa: S603

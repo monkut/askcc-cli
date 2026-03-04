@@ -1,6 +1,7 @@
 import argparse
 import json
 import logging
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -41,6 +42,9 @@ def _run_claude(
         json.dumps(agent_definition),
     ]
 
+    # Remove CLAUDECODE env var so the child claude process doesn't think it's nested inside Claude Code
+    env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+
     logger.info("Requesting '%s' action for %s from Claude Code ...", config.action_name, issue_url)
     result = subprocess.run(  # noqa: S603
         cmd,
@@ -48,6 +52,7 @@ def _run_claude(
         check=False,
         capture_output=True,
         cwd=cwd,
+        env=env,
     )
     logger.info("Claude Code finished %s (exit code: %d)", issue_url, result.returncode)
 

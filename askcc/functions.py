@@ -1,15 +1,21 @@
 import json
 import logging
+import re
 import shutil
 import subprocess
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from importlib.resources import files as package_files
 from pathlib import Path
 from string import Template
 from urllib.parse import urlparse
 
 from .definitions import AGENT_CONFIGS, AgentAction, AgentConfig
-from .settings import ENABLE_ISSUE_LABEL_PREFIX_VALIDATION, REQUIRED_ISSUE_LABEL_PREFIXES, TEMPLATES_DIR
+from .settings import (
+    BLOCKING_LABELS,
+    ENABLE_ISSUE_LABEL_PREFIX_VALIDATION,
+    REQUIRED_ISSUE_LABEL_PREFIXES,
+    TEMPLATES_DIR,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +103,97 @@ def validate_issue_labels(github_issue_url: str) -> list[str]:
         if not any(label.startswith(prefix) for label in labels):
             errors.append(f"Missing required label with prefix '{prefix}' (found: {labels})")
     return errors
+
+
+@dataclass(frozen=True)
+class CheckResult:
+    name: str
+    passed: bool
+    message: str
+
+
+def _has_acceptance_criteria(body: str) -> bool:
+    """Check for an acceptance criteria section with checklist items."""
+    match = re.search(r"#{2,}\s+acceptance\s+criteria", body, re.IGNORECASE)
+    if not match:
+        return False
+    section_start = match.end()
+    next_heading = re.search(r"\n#{2,}\s+", body[section_start:])
+    section = body[section_start : section_start + next_heading.start()] if next_heading else body[section_start:]
+    return bool(re.search(r"-\s*\[[\sx]\]", section))
+
+
+def _has_dependencies_section(body: str) -> bool:
+    """Check for a dependencies, prerequisites, or context section heading."""
+    return bool(re.search(r"#{2,}\s+(?:dependenc|prerequisit|context|blocker)", body, re.IGNORECASE))
+
+
+def validate_issue_readiness(github_issue_url: str) -> list[CheckResult]:
+    """Validate that a GitHub issue meets readiness criteria for development."""
+    gh = _require_gh_cli()
+    owner, repo, issue_number = _parse_issue_url(github_issue_url)
+    repo_nwo = f"{owner}/{repo}"
+
+    result = subprocess.run(  # noqa: S603
+        [gh, "api", f"repos/{repo_nwo}/issues/{issue_number}"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    issue = json.loads(result.stdout)
+    body = issue.get("body") or ""
+
+    checks: list[CheckResult] = []
+
+    # 1. Acceptance criteria
+    has_ac = _has_acceptance_criteria(body)
+    checks.append(
+        CheckResult(
+            name="Acceptance criteria",
+            passed=has_ac,
+            message="Clear acceptance criteria found"
+            if has_ac
+            else "No acceptance criteria with checklist items found",
+        )
+    )
+
+    # 2. Dependencies identified
+    has_deps = _has_dependencies_section(body)
+    checks.append(
+        CheckResult(
+            name="Dependencies identified",
+            passed=has_deps,
+            message="Dependencies section found" if has_deps else "No dependencies/context section found",
+        )
+    )
+
+    # 3. Assignee confirmed
+    assignees = issue.get("assignees") or []
+    has_assignee = len(assignees) > 0
+    assignee_names = ", ".join(a["login"] for a in assignees)
+    checks.append(
+        CheckResult(
+            name="Assignee confirmed",
+            passed=has_assignee,
+            message=f"Assigned to: {assignee_names}" if has_assignee else "No assignee",
+        )
+    )
+
+    # 4. No blocking labels
+    label_names = [label["name"] for label in issue.get("labels") or []]
+    blocking_found = [name for name in label_names if name in BLOCKING_LABELS]
+    no_blockers = len(blocking_found) == 0
+    checks.append(
+        CheckResult(
+            name="No blocking labels",
+            passed=no_blockers,
+            message="No blocking labels found"
+            if no_blockers
+            else f"Blocking labels present: {', '.join(blocking_found)}",
+        )
+    )
+
+    return checks
 
 
 CLAUDE_HOME = Path.home() / ".claude"

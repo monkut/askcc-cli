@@ -103,11 +103,21 @@ def _print_validation_report(issue_url: str, checks: list[CheckResult]) -> None:
     print(f"Result: {result} ({passed_count}/{total} checks passed)")  # noqa: T201
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    """Build the CLI argument parser with all subcommands."""
+def main() -> None:  # noqa: PLR0915
+    configure_logging()
     parser = argparse.ArgumentParser(description="A one-shot Claude Code CLI executor.")
-    parser.add_argument("--version", action="version", version=f"askcc {__version__}")
-    parser.add_argument("--cwd", type=Path, default=None, help="Working directory for the claude subprocess.")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"askcc {__version__}",
+    )
+
+    parser.add_argument(
+        "--cwd",
+        type=Path,
+        default=None,
+        help="Working directory for the claude subprocess (defaults to current directory).",
+    )
     parser.add_argument(
         "-i",
         "--ignore-labels",
@@ -125,24 +135,28 @@ def _build_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    for name, help_text in (
-        ("plan", "Run Claude in plan mode (read-only analysis)."),
-        ("validate", "Check issue readiness for development."),
-        ("review", "Run Claude in review mode (issue quality review)."),
-        ("explore", "Run Claude in explore mode (investigate and propose solutions)."),
-        ("diagnose", "Run Claude in diagnose mode (root cause analysis)."),
-    ):
-        sub = subparsers.add_parser(name, help=help_text)
-        sub.add_argument("-g", "--github-issue-url", required=True, help=f"GitHub issue URL to {name}.")
+    plan_parser = subparsers.add_parser("plan", help="Run Claude in plan mode (read-only analysis).")
+    plan_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL to plan.")
+
+    validate_parser = subparsers.add_parser("validate", help="Check issue readiness for development.")
+    validate_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL to validate.")
 
     develop_parser = subparsers.add_parser("develop", help="Run Claude in development mode.")
     develop_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL to develop.")
     develop_parser.add_argument(
-        "--skip-validation",
-        action="store_true",
-        default=False,
-        help="Skip readiness validation before development.",
+        "--skip-validation", action="store_true", default=False, help="Skip readiness validation before development."
     )
+
+    review_parser = subparsers.add_parser("review", help="Run Claude in review mode (issue quality review).")
+    review_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL to review.")
+
+    explore_parser = subparsers.add_parser(
+        "explore", help="Run Claude in explore mode (investigate and propose solutions)."
+    )
+    explore_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL to explore.")
+
+    diagnose_parser = subparsers.add_parser("diagnose", help="Run Claude in diagnose mode (root cause analysis).")
+    diagnose_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL to diagnose.")
 
     install_parser = subparsers.add_parser("install", help="Install bundled skills to the agent workspace.")
     install_parser.add_argument(
@@ -151,12 +165,8 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Target directory for skills (overrides auto-detection of ~/.claude and ~/.openclaw).",
     )
-    return parser
 
-
-def main() -> None:
-    configure_logging()
-    args = _build_parser().parse_args()
+    args = parser.parse_args()
 
     if args.command == "install":
         install_skills(directory=args.directory)

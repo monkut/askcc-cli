@@ -14,12 +14,15 @@ if TYPE_CHECKING:
 from askcc.cli import _run_claude, main
 from askcc.definitions import AGENT_CONFIGS, AgentAction, AgentConfig, SupportedLanguage
 from askcc.functions import (
+    _has_acceptance_criteria,
+    _has_dependencies_section,
     _parse_issue_url,
     append_usage_to_last_comment,
     bootstrap_templates,
     install_skills,
     load_agent_config,
     load_template,
+    validate_issue_readiness,
     validate_template,
 )
 
@@ -454,3 +457,216 @@ class TestInstallSkills:
             install_skills()
 
         assert caplog.text.count("Target directory not found") == 2
+
+
+class TestHasAcceptanceCriteria:
+    def test_with_heading_and_checklist(self):
+        body = "## Summary\nSome text\n\n## Acceptance Criteria\n- [ ] First item\n- [ ] Second item\n"
+        assert _has_acceptance_criteria(body) is True
+
+    def test_with_checked_items(self):
+        body = "## Acceptance Criteria\n- [x] Done item\n- [ ] Pending item\n"
+        assert _has_acceptance_criteria(body) is True
+
+    def test_missing_heading(self):
+        body = "## Summary\nSome text\n- [ ] A checklist item\n"
+        assert _has_acceptance_criteria(body) is False
+
+    def test_heading_without_checklist(self):
+        body = "## Acceptance Criteria\nJust plain text, no checklist.\n"
+        assert _has_acceptance_criteria(body) is False
+
+    def test_empty_body(self):
+        assert _has_acceptance_criteria("") is False
+
+    def test_checklist_in_different_section(self):
+        body = "## Acceptance Criteria\nNo checklist here.\n\n## Other\n- [ ] Wrong section\n"
+        assert _has_acceptance_criteria(body) is False
+
+    def test_h3_heading(self):
+        body = "### Acceptance Criteria\n- [ ] Works with h3\n"
+        assert _has_acceptance_criteria(body) is True
+
+
+class TestHasDependenciesSection:
+    def test_dependencies_heading(self):
+        assert _has_dependencies_section("## Dependencies\n- None\n") is True
+
+    def test_context_heading(self):
+        assert _has_dependencies_section("## Context\nSee docs.\n") is True
+
+    def test_prerequisites_heading(self):
+        assert _has_dependencies_section("## Prerequisites\n- Python 3.14\n") is True
+
+    def test_blockers_heading(self):
+        assert _has_dependencies_section("## Blockers\n- Waiting on API\n") is True
+
+    def test_no_matching_heading(self):
+        assert _has_dependencies_section("## Summary\nSome text\n") is False
+
+    def test_empty_body(self):
+        assert _has_dependencies_section("") is False
+
+
+class TestValidateIssueReadiness:
+    ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/33"
+
+    def _make_issue_json(
+        self,
+        *,
+        body: str = "",
+        assignees: list[dict] | None = None,
+        labels: list[dict] | None = None,
+    ) -> str:
+        return json.dumps(
+            {
+                "body": body,
+                "assignees": assignees or [],
+                "labels": labels or [],
+            }
+        )
+
+    def test_all_checks_pass(self):
+        body = "## Acceptance Criteria\n- [ ] Item\n\n## Context\nSee docs.\n"
+        issue_json = self._make_issue_json(
+            body=body,
+            assignees=[{"login": "dev1"}],
+            labels=[{"name": "action:develop"}],
+        )
+        gh_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=issue_json, stderr="")
+
+        with (
+            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
+            patch("askcc.functions.subprocess.run", return_value=gh_result),
+        ):
+            checks = validate_issue_readiness(self.ISSUE_URL)
+
+        assert all(c.passed for c in checks)
+        assert len(checks) == 4
+
+    def test_all_checks_fail(self):
+        issue_json = self._make_issue_json(
+            body="## Summary\nNo criteria here.\n",
+            assignees=[],
+            labels=[{"name": "needs:decision"}, {"name": "blocked"}],
+        )
+        gh_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=issue_json, stderr="")
+
+        with (
+            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
+            patch("askcc.functions.subprocess.run", return_value=gh_result),
+        ):
+            checks = validate_issue_readiness(self.ISSUE_URL)
+
+        assert not any(c.passed for c in checks)
+        assert len(checks) == 4
+
+    def test_blocking_label_detected(self):
+        issue_json = self._make_issue_json(
+            body="## Acceptance Criteria\n- [ ] Item\n\n## Context\nSee docs.\n",
+            assignees=[{"login": "dev1"}],
+            labels=[{"name": "needs:decision"}],
+        )
+        gh_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=issue_json, stderr="")
+
+        with (
+            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
+            patch("askcc.functions.subprocess.run", return_value=gh_result),
+        ):
+            checks = validate_issue_readiness(self.ISSUE_URL)
+
+        blocking_check = next(c for c in checks if c.name == "No blocking labels")
+        assert blocking_check.passed is False
+        assert "needs:decision" in blocking_check.message
+
+    def test_null_body_handled(self):
+        issue_json = json.dumps({"body": None, "assignees": [], "labels": []})
+        gh_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=issue_json, stderr="")
+
+        with (
+            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
+            patch("askcc.functions.subprocess.run", return_value=gh_result),
+        ):
+            checks = validate_issue_readiness(self.ISSUE_URL)
+
+        assert len(checks) == 4
+        assert not checks[0].passed  # acceptance criteria
+        assert not checks[1].passed  # dependencies
+
+
+class TestValidateCommand:
+    ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/33"
+
+    def test_validate_exits_zero_on_pass(self, capfd: pytest.CaptureFixture[str]):
+        body = "## Acceptance Criteria\n- [ ] Item\n\n## Context\nSee docs.\n"
+        issue_json = json.dumps(
+            {
+                "body": body,
+                "assignees": [{"login": "dev1"}],
+                "labels": [],
+            }
+        )
+        gh_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=issue_json, stderr="")
+
+        with (
+            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
+            patch("askcc.functions.subprocess.run", return_value=gh_result),
+            patch("sys.argv", ["askcc", "validate", "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit, match="0"),
+        ):
+            main()
+
+        captured = capfd.readouterr()
+        assert "Result: PASS" in captured.out
+
+    def test_validate_exits_one_on_fail(self, capfd: pytest.CaptureFixture[str]):
+        issue_json = json.dumps({"body": "", "assignees": [], "labels": []})
+        gh_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=issue_json, stderr="")
+
+        with (
+            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
+            patch("askcc.functions.subprocess.run", return_value=gh_result),
+            patch("sys.argv", ["askcc", "validate", "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit, match="1"),
+        ):
+            main()
+
+        captured = capfd.readouterr()
+        assert "Result: FAIL" in captured.out
+
+
+class TestDevelopSkipValidation:
+    ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/1"
+
+    def test_develop_fails_on_validation_failure(self, capfd: pytest.CaptureFixture[str]):
+        """Develop exits 1 when readiness validation fails."""
+        issue_json = json.dumps({"body": "", "assignees": [], "labels": []})
+        gh_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=issue_json, stderr="")
+
+        with (
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.validate_issue_labels", return_value=[]),
+            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
+            patch("askcc.functions.subprocess.run", return_value=gh_result),
+            patch("sys.argv", ["askcc", "develop", "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit, match="1"),
+        ):
+            main()
+
+        captured = capfd.readouterr()
+        assert "Result: FAIL" in captured.out
+
+    def test_develop_skip_validation_bypasses_check(self):
+        """Develop --skip-validation skips readiness validation and runs Claude."""
+        with (
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.validate_issue_labels", return_value=[]),
+            patch("askcc.cli.validate_issue_readiness") as mock_validate,
+            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
+            patch("askcc.cli._run_claude", return_value=(0, None)),
+            patch("sys.argv", ["askcc", "develop", "--skip-validation", "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit),
+        ):
+            main()
+
+        mock_validate.assert_not_called()

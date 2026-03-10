@@ -30,7 +30,7 @@ uvx --from . --python 3.14 askcc --help
 ## Usage
 
 ```
-askcc [--cwd DIR] {plan,develop,review,explore,diagnose} --github-issue-url URL
+askcc [--cwd DIR] {plan,validate,develop,review,explore,diagnose} --github-issue-url URL
 askcc install [--directory DIR]
 ```
 
@@ -39,6 +39,7 @@ askcc install [--directory DIR]
 | Command    | Description                                                              |
 |------------|--------------------------------------------------------------------------|
 | `plan`     | Fetch the issue and run Claude in planning mode (architecture/design)    |
+| `validate` | Check issue readiness for development (acceptance criteria, dependencies, assignee, blocking labels) |
 | `develop`  | Fetch the issue and run Claude in development mode (implementation)      |
 | `review`   | Fetch the issue and run Claude in review mode (issue quality review)     |
 | `explore`  | Fetch the issue and run Claude in explore mode (investigate and propose solutions) |
@@ -51,6 +52,7 @@ askcc install [--directory DIR]
 |----------------------|----------------------------------------------------------|
 | `--github-issue-url` | **(required)** GitHub issue URL to process               |
 | `--cwd`              | Working directory for the Claude subprocess (default: cwd) |
+| `--skip-validation`  | Skip readiness validation before development (`develop` only) |
 | `--directory`        | Override auto-detection and install skills to this directory (`install` only) |
 | `--version`          | Show version                                             |
 
@@ -96,6 +98,12 @@ Review an issue for quality and completeness:
 
 ```bash
 askcc review --github-issue-url https://github.com/monkut/askcc-cli/issues/1
+```
+
+Validate an issue is ready for development:
+
+```bash
+askcc validate --github-issue-url https://github.com/monkut/askcc-cli/issues/1
 ```
 
 Develop an issue in a specific project directory:

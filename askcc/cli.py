@@ -10,12 +10,14 @@ from string import Template
 from . import __version__
 from .definitions import AgentAction, AgentConfig, SupportedLanguage
 from .functions import (
+    CheckResult,
     append_usage_to_last_comment,
     bootstrap_templates,
     fetch_github_issue,
     install_skills,
     load_agent_config,
     validate_issue_labels,
+    validate_issue_readiness,
 )
 from .settings import configure_logging
 
@@ -87,7 +89,21 @@ def _run_claude(
     return result.returncode, usage
 
 
-def main() -> None:
+def _print_validation_report(issue_url: str, checks: list[CheckResult]) -> None:
+    """Print a structured pass/fail validation report."""
+    passed_count = sum(1 for c in checks if c.passed)
+    total = len(checks)
+    print(f"Validation Report: {issue_url}")  # noqa: T201
+    print("-" * 60)  # noqa: T201
+    for check in checks:
+        status = "PASS" if check.passed else "FAIL"
+        print(f"  [{status}] {check.name}: {check.message}")  # noqa: T201
+    print("-" * 60)  # noqa: T201
+    result = "PASS" if passed_count == total else "FAIL"
+    print(f"Result: {result} ({passed_count}/{total} checks passed)")  # noqa: T201
+
+
+def main() -> None:  # noqa: PLR0915
     configure_logging()
     parser = argparse.ArgumentParser(description="A one-shot Claude Code CLI executor.")
     parser.add_argument(
@@ -122,8 +138,14 @@ def main() -> None:
     plan_parser = subparsers.add_parser("plan", help="Run Claude in plan mode (read-only analysis).")
     plan_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL to plan.")
 
+    validate_parser = subparsers.add_parser("validate", help="Check issue readiness for development.")
+    validate_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL to validate.")
+
     develop_parser = subparsers.add_parser("develop", help="Run Claude in development mode.")
     develop_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL to develop.")
+    develop_parser.add_argument(
+        "--skip-validation", action="store_true", default=False, help="Skip readiness validation before development."
+    )
 
     review_parser = subparsers.add_parser("review", help="Run Claude in review mode (issue quality review).")
     review_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL to review.")
@@ -150,6 +172,11 @@ def main() -> None:
         install_skills(directory=args.directory)
         return
 
+    if args.command == "validate":
+        checks = validate_issue_readiness(args.github_issue_url)
+        _print_validation_report(args.github_issue_url, checks)
+        sys.exit(0 if all(c.passed for c in checks) else 1)
+
     bootstrap_templates()
 
     if not args.ignore_labels:
@@ -157,6 +184,13 @@ def main() -> None:
         if label_errors:
             for error in label_errors:
                 logger.error(error)
+            sys.exit(1)
+
+    if args.command == "develop" and not args.skip_validation:
+        checks = validate_issue_readiness(args.github_issue_url)
+        if not all(c.passed for c in checks):
+            _print_validation_report(args.github_issue_url, checks)
+            logger.error("Issue readiness validation failed. Use --skip-validation to bypass.")
             sys.exit(1)
 
     agent = AgentAction(args.command)

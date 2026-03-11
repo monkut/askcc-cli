@@ -16,6 +16,7 @@ from .functions import (
     fetch_github_issue,
     install_skills,
     load_agent_config,
+    transition_issue_to_review,
     validate_issue_labels,
     validate_issue_readiness,
 )
@@ -204,6 +205,9 @@ def main() -> None:  # noqa: PLR0915
 
     if usage:
         append_usage_to_last_comment(args.github_issue_url, usage)
+
+    if args.command == "develop" and return_code == 0:
+        transition_issue_to_review(args.github_issue_url)
 
     sys.exit(return_code)
 

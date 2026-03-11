@@ -86,6 +86,97 @@ def fetch_github_issue(github_issue_url: str) -> str:
     return "\n\n".join(sections)
 
 
+def _find_linked_pr_number(gh: str, owner: str, repo: str, issue_number: int) -> int | None:
+    """Find the most recent open PR linked to the given issue number.
+
+    Searches by branch naming convention (e.g. feature/N-*, add/N-*) first,
+    then falls back to matching issue references in PR body text.
+    """
+    repo_nwo = f"{owner}/{repo}"
+    try:
+        result = subprocess.run(  # noqa: S603
+            [gh, "pr", "list", "-R", repo_nwo, "--json", "number,headRefName,body", "--limit", "50"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        prs = json.loads(result.stdout)
+    except (subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        logger.warning("Failed to list PRs for %s: %s", repo_nwo, exc)
+        return None
+
+    # Match branch names like "type/N-description" (askcc convention)
+    branch_pattern = re.compile(rf"^[^/]+/{issue_number}-")
+    for pr in prs:
+        if branch_pattern.match(pr.get("headRefName", "")):
+            return pr["number"]
+
+    # Fallback: check PR body for issue reference
+    for pr in prs:
+        body = pr.get("body", "") or ""
+        if f"#{issue_number}" in body or f"/issues/{issue_number}" in body:
+            return pr["number"]
+
+    return None
+
+
+def fetch_pr_content(github_issue_url: str) -> str:
+    """Fetch the linked PR's metadata, diff, and review comments for code review."""
+    gh = _require_gh_cli()
+    owner, repo, issue_number = _parse_issue_url(github_issue_url)
+    repo_nwo = f"{owner}/{repo}"
+
+    pr_number = _find_linked_pr_number(gh, owner, repo, issue_number)
+    if pr_number is None:
+        msg = f"No linked pull request found for issue #{issue_number} in {repo_nwo}"
+        raise ValueError(msg)
+
+    logger.info("Found linked PR #%d for issue #%d", pr_number, issue_number)
+
+    # Fetch PR metadata
+    pr_result = subprocess.run(  # noqa: S603
+        [gh, "api", f"repos/{repo_nwo}/pulls/{pr_number}"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    pr_data = json.loads(pr_result.stdout)
+    pr_title = pr_data.get("title", "")
+    pr_body = pr_data.get("body", "") or ""
+    pr_url = pr_data.get("html_url", "")
+
+    # Fetch PR diff
+    diff_result = subprocess.run(  # noqa: S603
+        [gh, "api", f"repos/{repo_nwo}/pulls/{pr_number}", "-H", "Accept: application/vnd.github.v3.diff"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    diff = diff_result.stdout
+
+    # Fetch PR review comments
+    comments_result = subprocess.run(  # noqa: S603
+        [gh, "api", "--paginate", f"repos/{repo_nwo}/pulls/{pr_number}/comments"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    comments = json.loads(comments_result.stdout)
+    comment_texts = [
+        f"Review comment by @{c['user']['login']} on {c.get('path', 'unknown')}:\n{c['body']}" for c in comments
+    ]
+
+    sections = [
+        f"Pull Request #{pr_number}\nURL: {pr_url}\nTitle: {pr_title}\n\n{pr_body}",
+        f"PR Diff:\n{diff}",
+    ]
+    if comment_texts:
+        sections.append("Existing Review Comments:\n" + "\n---\n".join(comment_texts))
+
+    logger.info("Fetched PR #%d with %d review comment(s)", pr_number, len(comment_texts))
+    return "\n\n".join(sections)
+
+
 def validate_issue_labels(github_issue_url: str) -> list[str]:
     """Validate that the issue has at least one label matching each required prefix.
 

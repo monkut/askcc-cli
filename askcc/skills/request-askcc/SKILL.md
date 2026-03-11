@@ -1,6 +1,6 @@
 ---
 name: request-askcc
-description: Request REVIEW, PLAN, DEVELOP, EXPLORE or DIAGNOSE actions for GitHub issues via the askcc CLI. Use when a user asks to review, plan, develop, explore, or diagnose a GitHub issue.
+description: Request REVIEW, REVIEWPR, PLAN, DEVELOP, EXPLORE or DIAGNOSE actions for GitHub issues via the askcc CLI. Use when a user asks to review, plan, develop, explore, diagnose, or review a PR for a GitHub issue.
 ---
 
 # Request GitHub Issue Action
@@ -14,6 +14,7 @@ Use the `askcc` tool to request processing (plan or develop) of GitHub issues de
 - When a user asks to REVIEW a github issue, use `askcc review`.
 - When a user asks to EXPLORE a github issue (investigate and propose solutions), use `askcc explore`.
 - When a user asks to DIAGNOSE a github issue (root cause analysis), use `askcc diagnose`.
+- When a user asks to REVIEW a PR (code review of a pull request linked to an issue), use `askcc reviewpr`.
 
 ## Examples
 
@@ -51,6 +52,13 @@ Use the `askcc` tool to request processing (plan or develop) of GitHub issues de
   ```bash
   # This investigates the reported issue, identifies potential root causes, and requests additional information.
   askcc diagnose --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
+  ```
+
+- "Review the PR for https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1"
+
+  ```bash
+  # This fetches the issue and its linked PR, reviews the code against Definition of Done criteria, and posts a structured review on the PR.
+  askcc reviewpr --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
   ```
 
 WARNING: If the `{TARGET DEVELOPMENT REPOSITORY}` cannot be determined, ASK user in Slack.

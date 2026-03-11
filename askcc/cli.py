@@ -14,6 +14,7 @@ from .functions import (
     append_usage_to_last_comment,
     bootstrap_templates,
     fetch_github_issue,
+    fetch_pr_content,
     install_skills,
     load_agent_config,
     transition_issue_to_planning,
@@ -91,6 +92,14 @@ def _run_claude(
     return result.returncode, usage
 
 
+def _build_prompt(command: str, config: AgentConfig, issue_content: str, issue_url: str) -> str:
+    """Build the user prompt, fetching PR content for reviewpr commands."""
+    if command == "reviewpr":
+        pr_content = fetch_pr_content(issue_url)
+        return Template(config.user_prompt_template).safe_substitute(issue_content=issue_content, pr_content=pr_content)
+    return Template(config.user_prompt_template).safe_substitute(issue_content=issue_content)
+
+
 def _print_validation_report(issue_url: str, checks: list[CheckResult]) -> None:
     """Print a structured pass/fail validation report."""
     passed_count = sum(1 for c in checks if c.passed)
@@ -105,7 +114,7 @@ def _print_validation_report(issue_url: str, checks: list[CheckResult]) -> None:
     print(f"Result: {result} ({passed_count}/{total} checks passed)")  # noqa: T201
 
 
-def main() -> None:  # noqa: PLR0915
+def main() -> None:  # noqa: PLR0912, PLR0915, C901
     configure_logging()
     parser = argparse.ArgumentParser(description="A one-shot Claude Code CLI executor.")
     parser.add_argument(
@@ -155,6 +164,9 @@ def main() -> None:  # noqa: PLR0915
     review_parser = subparsers.add_parser("review", help="Run Claude in review mode (issue quality review).")
     review_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL to review.")
 
+    reviewpr_parser = subparsers.add_parser("reviewpr", help="Review a PR's code against its linked issue.")
+    reviewpr_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL with linked PR.")
+
     explore_parser = subparsers.add_parser(
         "explore", help="Run Claude in explore mode (investigate and propose solutions)."
     )
@@ -201,7 +213,11 @@ def main() -> None:  # noqa: PLR0915
     agent = AgentAction(args.command)
     config = load_agent_config(agent)
     issue_content = fetch_github_issue(args.github_issue_url)
-    prompt = Template(config.user_prompt_template).safe_substitute(issue_content=issue_content)
+    try:
+        prompt = _build_prompt(args.command, config, issue_content, args.github_issue_url)
+    except ValueError:
+        logger.exception("Failed to build prompt for '%s' command", args.command)
+        sys.exit(1)
     if args.language != SupportedLanguage.ENGLISH:
         prompt += f"\nOutput all comments in {args.language}."
     logger.info("Prompt prepared for '%s' command", agent.value)

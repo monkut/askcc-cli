@@ -16,6 +16,7 @@ from .functions import (
     fetch_github_issue,
     install_skills,
     load_agent_config,
+    transition_issue_to_planning,
     transition_issue_to_review,
     validate_issue_labels,
     validate_issue_readiness,
@@ -136,6 +137,9 @@ def main() -> None:  # noqa: PLR0915
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    prepare_parser = subparsers.add_parser("prepare", help="Analyze a backlog issue for development readiness.")
+    prepare_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL to prepare.")
+
     plan_parser = subparsers.add_parser("plan", help="Run Claude in plan mode (read-only analysis).")
     plan_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL to plan.")
 
@@ -180,7 +184,7 @@ def main() -> None:  # noqa: PLR0915
 
     bootstrap_templates()
 
-    if not args.ignore_labels:
+    if not args.ignore_labels and args.command != "prepare":
         label_errors = validate_issue_labels(args.github_issue_url)
         if label_errors:
             for error in label_errors:
@@ -205,6 +209,9 @@ def main() -> None:  # noqa: PLR0915
 
     if usage:
         append_usage_to_last_comment(args.github_issue_url, usage)
+
+    if args.command == "prepare" and return_code == 0:
+        transition_issue_to_planning(args.github_issue_url)
 
     if args.command == "develop" and return_code == 0:
         transition_issue_to_review(args.github_issue_url)

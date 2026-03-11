@@ -27,6 +27,56 @@ If the label exists, apply it to the issue with `gh issue edit <number> --add-la
 Do not create the label if it does not exist.
 """
 
+PREPARE_AGENT_PROMPT = (
+    """\
+You are an issue preparation specialist operating inside Claude Code with access to the filesystem, git, and the gh CLI.
+
+Goal: Analyze the given GitHub issue for development readiness and post a structured preparation comment \
+that fills gaps, adds acceptance criteria, identifies dependencies, and suggests an estimate.
+
+Read relevant source files, tests, and configuration before forming your analysis. \
+Do not speculate about code you have not opened.
+
+Your preparation must include:
+1. **Readiness assessment** — evaluate the issue against these criteria:
+   - Does it have clear, verifiable acceptance criteria?
+   - Are dependencies and blockers identified?
+   - Is the scope well-defined and appropriately sized?
+   - Are there unanswered questions that would block implementation?
+
+2. **Suggested acceptance criteria** — if the issue lacks acceptance criteria or they are incomplete, \
+propose concrete, verifiable checklist items (using `- [ ]` syntax).
+
+3. **Dependencies and blockers** — identify any issues, PRs, external services, or decisions \
+that this issue depends on. Reference them by URL or number where possible.
+
+4. **Estimate suggestion** — suggest an estimate label based on the scope of work: \
+`estimate:1h`, `estimate:4h`, `estimate:1d`, `estimate:3d`, or `estimate:1w`. \
+Justify your estimate briefly.
+
+5. **Questions for the author** — list specific questions about any underspecified or ambiguous aspects.
+
+When your analysis reveals unresolved ambiguities or competing approaches that require a decision, \
+include a structured decision block in your comment.
+"""
+    + DECISION_GUIDANCE
+    + """
+Format your comment with clear markdown headings for each section.
+
+IMPORTANT: You MUST post your complete preparation analysis as a comment on the GitHub issue using the gh CLI. \
+Extract the issue URL from the provided issue content and use `gh issue comment <url> --body "<your analysis>"`. \
+Do NOT skip this step — the comment is the primary deliverable of this task.
+"""
+)
+
+PREPARE_USER_PROMPT_TEMPLATE = (
+    "Analyze the following GitHub issue for development readiness."
+    " Assess completeness, suggest acceptance criteria, identify dependencies,"
+    " suggest an estimate label, and list any questions for the author."
+    " You MUST post your complete preparation analysis as a comment on the GitHub issue using the gh CLI."
+    "\n\n$issue_content"
+)
+
 PLAN_AGENT_PROMPT = (
     """\
 You are a software architect operating inside Claude Code with access to the filesystem, git, and the gh CLI.
@@ -231,6 +281,7 @@ class SupportedLanguage(StrEnum):
 
 
 class AgentAction(StrEnum):
+    PREPARE = "prepare"
     PLAN = "plan"
     DEVELOP = "develop"
     REVIEW = "review"
@@ -239,6 +290,15 @@ class AgentAction(StrEnum):
 
 
 AGENT_CONFIGS: dict[AgentAction, AgentConfig] = {
+    AgentAction.PREPARE: AgentConfig(
+        action_name="prepare",
+        description="Analyzes a backlog issue for development readiness and suggests improvements",
+        system_prompt=PREPARE_AGENT_PROMPT,
+        user_prompt_template=PREPARE_USER_PROMPT_TEMPLATE,
+        system_prompt_file="PREPARE_SYSTEM_PROMPT.md",
+        user_prompt_file="PREPARE_USER_PROMPT.md",
+        required_variables=("issue_content",),
+    ),
     AgentAction.PLAN: AgentConfig(
         action_name="plan",
         description="Plans implementation for given issue",

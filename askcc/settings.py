@@ -18,6 +18,11 @@ REQUIRED_ISSUE_LABEL_PREFIXES: tuple[str, ...] = ("action:",)
 DEVELOP_LABEL = "action:develop"
 REVIEW_LABEL = "action:review"
 
+# Prepare transition
+PLANNING_STATUS_OPTIONS: tuple[str, ...] = ("planning",)
+PLANNER_FIELD_NAME = "Needs Action From"
+PLANNER_FIELD_VALUE = "PLANNER"
+
 # Project field transition
 REVIEW_STATUS_OPTIONS: tuple[str, ...] = ("in-internal-review", "in-review")
 REVIEWER_FIELD_NAME = "Needs Action From"

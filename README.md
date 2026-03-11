@@ -30,7 +30,7 @@ uvx --from . --python 3.14 askcc --help
 ## Usage
 
 ```
-askcc [--cwd DIR] {plan,validate,develop,review,explore,diagnose} --github-issue-url URL
+askcc [--cwd DIR] {prepare,plan,validate,develop,review,explore,diagnose} --github-issue-url URL
 askcc install [--directory DIR]
 ```
 
@@ -38,6 +38,7 @@ askcc install [--directory DIR]
 
 | Command    | Description                                                              |
 |------------|--------------------------------------------------------------------------|
+| `prepare`  | Analyze a backlog issue for development readiness (acceptance criteria, dependencies, estimates) |
 | `plan`     | Fetch the issue and run Claude in planning mode (architecture/design)    |
 | `validate` | Check issue readiness for development (acceptance criteria, dependencies, assignee, blocking labels) |
 | `develop`  | Fetch the issue and run Claude in development mode (implementation)      |
@@ -71,6 +72,8 @@ On first run, askcc creates `~/.askcc/templates/` with default template files:
 
 | File                       | Required variables | Description                          |
 |----------------------------|--------------------|--------------------------------------|
+| `PREPARE_SYSTEM_PROMPT.md`   | —                  | System prompt for the prepare agent    |
+| `PREPARE_USER_PROMPT.md`     | `$issue_content`   | User prompt template for preparation   |
 | `PLAN_SYSTEM_PROMPT.md`      | —                  | System prompt for the planning agent   |
 | `PLAN_USER_PROMPT.md`        | `$issue_content`   | User prompt template for planning      |
 | `DEVELOP_SYSTEM_PROMPT.md`   | —                  | System prompt for the dev agent        |
@@ -87,6 +90,12 @@ Edit any file to customize the agent's behavior. User prompt templates **must** 
 Override the config directory by setting the `ASKCC_HOME` environment variable (e.g. for testing).
 
 ### Examples
+
+Prepare a backlog issue for development:
+
+```bash
+askcc prepare --github-issue-url https://github.com/monkut/askcc-cli/issues/1
+```
 
 Plan an issue:
 

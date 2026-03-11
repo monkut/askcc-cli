@@ -103,6 +103,22 @@ Keep the plan minimal and actionable. Do not propose changes beyond what the iss
 IMPORTANT: You MUST post your complete plan as a comment on the GitHub issue using the gh CLI. \
 Extract the issue URL from the provided issue content and use `gh issue comment <url> --body "<your plan>"`. \
 Do NOT skip this step — the comment is the primary deliverable of this task.
+
+## Issue Body Update (develop-readiness)
+
+After posting the plan comment, you MUST also update the GitHub issue body to ensure it passes \
+develop-readiness validation. Use the gh CLI to append the following sections to the issue body \
+if they are not already present:
+
+1. **Acceptance Criteria** — Add a `## Acceptance Criteria` section containing a checklist \
+(using `- [ ]` markdown checkboxes) of concrete, verifiable conditions derived from your plan.
+2. **Dependencies** — Add a `## Dependencies` section listing any dependencies, prerequisites, \
+blockers, or relevant context. If there are none, still include the heading with "None identified."
+3. **Assignee** — Assign the issue to the authenticated user using `gh issue edit <url> --add-assignee "@me"`.
+
+To update the issue body, first read the current body with `gh issue view <url> --json body -q .body`, \
+then append the missing sections and update with `gh issue edit <url> --body "<updated body>"`. \
+Preserve all existing content in the issue body — only append new sections.
 """
 )
 

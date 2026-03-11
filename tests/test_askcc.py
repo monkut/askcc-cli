@@ -15,6 +15,7 @@ from askcc.cli import _run_claude, main
 from askcc.definitions import AGENT_CONFIGS, AgentAction, AgentConfig, SupportedLanguage
 from askcc.functions import (
     _add_issue_label,
+    _find_linked_pr_number,
     _find_option_id,
     _has_acceptance_criteria,
     _has_dependencies_section,
@@ -23,6 +24,7 @@ from askcc.functions import (
     _transition_project_fields,
     append_usage_to_last_comment,
     bootstrap_templates,
+    fetch_pr_content,
     install_skills,
     load_agent_config,
     load_template,
@@ -64,6 +66,8 @@ EXPECTED_TEMPLATE_FILES = {
     "DEVELOP_USER_PROMPT.md",
     "REVIEW_SYSTEM_PROMPT.md",
     "REVIEW_USER_PROMPT.md",
+    "REVIEWPR_SYSTEM_PROMPT.md",
+    "REVIEWPR_USER_PROMPT.md",
     "EXPLORE_SYSTEM_PROMPT.md",
     "EXPLORE_USER_PROMPT.md",
     "DIAGNOSE_SYSTEM_PROMPT.md",
@@ -1014,3 +1018,206 @@ class TestPrepareCommand:
             main()
 
         mock_transition.assert_not_called()
+
+
+class TestFindLinkedPrNumber:
+    def test_matches_branch_convention(self):
+        prs = json.dumps(
+            [
+                {"number": 10, "headRefName": "feature/42-add-feature", "body": "unrelated"},
+                {"number": 11, "headRefName": "main", "body": ""},
+            ]
+        )
+        result = subprocess.CompletedProcess(args=[], returncode=0, stdout=prs, stderr="")
+        with patch("askcc.functions.subprocess.run", return_value=result):
+            assert _find_linked_pr_number("/usr/bin/gh", "owner", "repo", 42) == 10
+
+    def test_matches_add_prefix(self):
+        prs = json.dumps([{"number": 5, "headRefName": "add/42-new-thing", "body": ""}])
+        result = subprocess.CompletedProcess(args=[], returncode=0, stdout=prs, stderr="")
+        with patch("askcc.functions.subprocess.run", return_value=result):
+            assert _find_linked_pr_number("/usr/bin/gh", "owner", "repo", 42) == 5
+
+    def test_falls_back_to_body_reference(self):
+        prs = json.dumps([{"number": 7, "headRefName": "my-branch", "body": "Closes #42"}])
+        result = subprocess.CompletedProcess(args=[], returncode=0, stdout=prs, stderr="")
+        with patch("askcc.functions.subprocess.run", return_value=result):
+            assert _find_linked_pr_number("/usr/bin/gh", "owner", "repo", 42) == 7
+
+    def test_matches_issue_url_in_body(self):
+        prs = json.dumps(
+            [
+                {"number": 8, "headRefName": "topic", "body": "See /issues/42 for details"},
+            ]
+        )
+        result = subprocess.CompletedProcess(args=[], returncode=0, stdout=prs, stderr="")
+        with patch("askcc.functions.subprocess.run", return_value=result):
+            assert _find_linked_pr_number("/usr/bin/gh", "owner", "repo", 42) == 8
+
+    def test_prefers_branch_over_body(self):
+        prs = json.dumps(
+            [
+                {"number": 1, "headRefName": "other", "body": "Fixes #42"},
+                {"number": 2, "headRefName": "feature/42-impl", "body": ""},
+            ]
+        )
+        result = subprocess.CompletedProcess(args=[], returncode=0, stdout=prs, stderr="")
+        with patch("askcc.functions.subprocess.run", return_value=result):
+            assert _find_linked_pr_number("/usr/bin/gh", "owner", "repo", 42) == 2
+
+    def test_returns_none_when_no_match(self):
+        prs = json.dumps([{"number": 1, "headRefName": "main", "body": "unrelated changes"}])
+        result = subprocess.CompletedProcess(args=[], returncode=0, stdout=prs, stderr="")
+        with patch("askcc.functions.subprocess.run", return_value=result):
+            assert _find_linked_pr_number("/usr/bin/gh", "owner", "repo", 42) is None
+
+    def test_returns_none_on_empty_list(self):
+        result = subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr="")
+        with patch("askcc.functions.subprocess.run", return_value=result):
+            assert _find_linked_pr_number("/usr/bin/gh", "owner", "repo", 42) is None
+
+    def test_returns_none_on_subprocess_error(self, caplog: pytest.LogCaptureFixture):
+        with (
+            caplog.at_level("WARNING", logger="askcc.functions"),
+            patch(
+                "askcc.functions.subprocess.run",
+                side_effect=subprocess.CalledProcessError(1, "gh", stderr="api error"),
+            ),
+        ):
+            assert _find_linked_pr_number("/usr/bin/gh", "owner", "repo", 42) is None
+        assert "Failed to list PRs" in caplog.text
+
+    def test_null_body_handled(self):
+        prs = json.dumps([{"number": 3, "headRefName": "feature/42-fix", "body": None}])
+        result = subprocess.CompletedProcess(args=[], returncode=0, stdout=prs, stderr="")
+        with patch("askcc.functions.subprocess.run", return_value=result):
+            assert _find_linked_pr_number("/usr/bin/gh", "owner", "repo", 42) == 3
+
+
+class TestFetchPrContent:
+    ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/42"
+
+    def _make_pr_responses(
+        self,
+        *,
+        pr_number: int = 10,
+        pr_title: str = "Add feature",
+        pr_body: str = "Implements #42",
+        pr_url: str = "https://github.com/monkut/askcc-cli/pull/10",
+        diff: str = "diff --git a/file.py\n+new line",
+        review_comments: list[dict] | None = None,
+    ) -> list[subprocess.CompletedProcess]:
+        # PR list (for _find_linked_pr_number)
+        prs = json.dumps([{"number": pr_number, "headRefName": "feature/42-add", "body": pr_body}])
+        list_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=prs, stderr="")
+
+        # PR metadata
+        pr_data = json.dumps({"title": pr_title, "body": pr_body, "html_url": pr_url})
+        meta_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=pr_data, stderr="")
+
+        # PR diff
+        diff_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=diff, stderr="")
+
+        # PR review comments
+        comments = json.dumps(review_comments or [])
+        comments_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=comments, stderr="")
+
+        return [list_result, meta_result, diff_result, comments_result]
+
+    def test_fetches_pr_content(self):
+        responses = self._make_pr_responses()
+        with (
+            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
+            patch("askcc.functions.subprocess.run", side_effect=responses),
+        ):
+            content = fetch_pr_content(self.ISSUE_URL)
+
+        assert "Pull Request #10" in content
+        assert "Add feature" in content
+        assert "diff --git" in content
+
+    def test_includes_review_comments(self):
+        comments = [{"user": {"login": "reviewer1"}, "path": "file.py", "body": "Looks good"}]
+        responses = self._make_pr_responses(review_comments=comments)
+        with (
+            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
+            patch("askcc.functions.subprocess.run", side_effect=responses),
+        ):
+            content = fetch_pr_content(self.ISSUE_URL)
+
+        assert "Review comment by @reviewer1" in content
+        assert "Looks good" in content
+
+    def test_raises_when_no_linked_pr(self):
+        prs = json.dumps([])
+        list_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=prs, stderr="")
+        with (
+            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
+            patch("askcc.functions.subprocess.run", return_value=list_result),
+            pytest.raises(ValueError, match="No linked pull request found"),
+        ):
+            fetch_pr_content(self.ISSUE_URL)
+
+
+class TestLoadReviewprConfig:
+    def test_load_reviewpr_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        templates_dir = tmp_path / "templates"
+        monkeypatch.setattr("askcc.functions.TEMPLATES_DIR", templates_dir)
+        bootstrap_templates()
+
+        config = load_agent_config(AgentAction.REVIEWPR)
+        assert config.action_name == "reviewpr"
+        assert config.description == "Reviews a pull request against its linked issue's Definition of Done"
+        assert config.required_variables == ("issue_content", "pr_content")
+
+
+class TestReviewprCommand:
+    ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/1"
+
+    def test_reviewpr_fetches_pr_content(self):
+        with (
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.validate_issue_labels", return_value=[]),
+            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
+            patch("askcc.cli.fetch_pr_content", return_value="pr diff content") as mock_pr,
+            patch("askcc.cli._run_claude", return_value=(0, None)) as mock_claude,
+            patch("sys.argv", ["askcc", "reviewpr", "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit),
+        ):
+            main()
+
+        mock_pr.assert_called_once_with(self.ISSUE_URL)
+        prompt = mock_claude.call_args[0][0]
+        assert "issue body" in prompt
+        assert "pr diff content" in prompt
+
+    def test_reviewpr_exits_on_no_linked_pr(self, caplog: pytest.LogCaptureFixture):
+        with (
+            caplog.at_level("ERROR", logger="askcc.cli"),
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.validate_issue_labels", return_value=[]),
+            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
+            patch("askcc.cli.fetch_pr_content", side_effect=ValueError("No linked pull request found")),
+            patch("sys.argv", ["askcc", "reviewpr", "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit, match="1"),
+        ):
+            main()
+
+        assert "Failed to build prompt" in caplog.text
+
+    def test_reviewpr_no_transition_on_success(self):
+        with (
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.validate_issue_labels", return_value=[]),
+            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
+            patch("askcc.cli.fetch_pr_content", return_value="pr content"),
+            patch("askcc.cli._run_claude", return_value=(0, None)),
+            patch("askcc.cli.transition_issue_to_review") as mock_review,
+            patch("askcc.cli.transition_issue_to_planning") as mock_planning,
+            patch("sys.argv", ["askcc", "reviewpr", "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit),
+        ):
+            main()
+
+        mock_review.assert_not_called()
+        mock_planning.assert_not_called()

@@ -245,6 +245,53 @@ DIAGNOSE_USER_PROMPT_TEMPLATE = (
     "\n\n$issue_content"
 )
 
+REVIEWPR_AGENT_PROMPT = (
+    """\
+You are a code reviewer operating inside Claude Code with access to the filesystem, git, and the gh CLI.
+
+Goal: Review the pull request linked to the given GitHub issue, verify it meets the Definition of Done, \
+and post a structured review on the PR.
+
+Pre-review:
+- The PR diff and metadata are provided in the prompt. Read them carefully.
+- Check out the PR branch using `gh pr checkout <number>` to inspect the full source.
+- Run the project's test suite to confirm all tests pass.
+
+Definition of Done checklist:
+1. **Acceptance criteria** — verify each criterion from the issue is satisfied by the code changes.
+2. **Test coverage** — new and changed logic has unit tests. Look for untested code paths.
+3. **Tests pass** — run the test suite and confirm all tests pass.
+4. **Documentation** — if behavior changed, docs/README/comments are updated.
+5. **No regressions** — no removed or broken existing functionality.
+6. **Security** — no injection vulnerabilities, exposed secrets, unsafe input handling.
+7. **Code quality** — clean, consistent style, no dead code, follows project conventions.
+
+Your review must include:
+- A summary of the PR changes and their alignment with the issue requirements.
+- A Definition of Done checklist with PASS/FAIL for each criterion and brief justification.
+- Specific code comments on issues found (file path, line, problem, suggestion).
+- A clear verdict: **APPROVE** or **REQUEST CHANGES**.
+
+Posting the review:
+- If all criteria pass: use `gh pr review <number> -R <owner/repo> --approve --body "<review>"`
+- If any criteria fail: use `gh pr review <number> -R <owner/repo> --request-changes --body "<review>"`
+- Also post a brief summary comment on the linked issue using `gh issue comment`.
+"""
+    + DECISION_GUIDANCE
+    + """
+IMPORTANT: You MUST post your review on the pull request using `gh pr review`. \
+Do NOT skip this step — the PR review is the primary deliverable of this task.
+"""
+)
+
+REVIEWPR_USER_PROMPT_TEMPLATE = (
+    "Review the following pull request against its linked GitHub issue."
+    " Verify the Definition of Done criteria and post a structured review on the PR"
+    " using `gh pr review`."
+    "\n\n$issue_content"
+    "\n\n$pr_content"
+)
+
 REVIEW_USER_PROMPT_TEMPLATE = (
     "Review the following GitHub issue for clarity, completeness, and feasibility."
     " You MUST post your complete review as a comment on the GitHub issue using the gh CLI."
@@ -285,6 +332,7 @@ class AgentAction(StrEnum):
     PLAN = "plan"
     DEVELOP = "develop"
     REVIEW = "review"
+    REVIEWPR = "reviewpr"
     EXPLORE = "explore"
     DIAGNOSE = "diagnose"
 
@@ -325,6 +373,15 @@ AGENT_CONFIGS: dict[AgentAction, AgentConfig] = {
         system_prompt_file="REVIEW_SYSTEM_PROMPT.md",
         user_prompt_file="REVIEW_USER_PROMPT.md",
         required_variables=("issue_content",),
+    ),
+    AgentAction.REVIEWPR: AgentConfig(
+        action_name="reviewpr",
+        description="Reviews a pull request against its linked issue's Definition of Done",
+        system_prompt=REVIEWPR_AGENT_PROMPT,
+        user_prompt_template=REVIEWPR_USER_PROMPT_TEMPLATE,
+        system_prompt_file="REVIEWPR_SYSTEM_PROMPT.md",
+        user_prompt_file="REVIEWPR_USER_PROMPT.md",
+        required_variables=("issue_content", "pr_content"),
     ),
     AgentAction.EXPLORE: AgentConfig(
         action_name="explore",

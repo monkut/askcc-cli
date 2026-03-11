@@ -14,6 +14,9 @@ from .settings import (
     BLOCKING_LABELS,
     DEVELOP_LABEL,
     ENABLE_ISSUE_LABEL_PREFIX_VALIDATION,
+    PLANNER_FIELD_NAME,
+    PLANNER_FIELD_VALUE,
+    PLANNING_STATUS_OPTIONS,
     REQUIRED_ISSUE_LABEL_PREFIXES,
     REVIEW_LABEL,
     REVIEW_STATUS_OPTIONS,
@@ -452,8 +455,17 @@ def _update_project_field(
         )
 
 
-def _transition_project_fields(gh: str, owner: str, repo: str, issue_number: int) -> None:
-    """Move issue to review status in project boards. Best-effort, warns on failure."""
+def _transition_project_fields(
+    gh: str,
+    owner: str,
+    repo: str,
+    issue_number: int,
+    *,
+    status_options: tuple[str, ...] = REVIEW_STATUS_OPTIONS,
+    action_field_value: str = REVIEWER_FIELD_VALUE,
+    action_field_name: str = REVIEWER_FIELD_NAME,
+) -> None:
+    """Move issue to a target status in project boards. Best-effort, warns on failure."""
     try:
         result = subprocess.run(  # noqa: S603
             [
@@ -493,7 +505,7 @@ def _transition_project_fields(gh: str, owner: str, repo: str, issue_number: int
         # Update Status field
         status_field = project.get("statusField")
         if status_field and status_field.get("options"):
-            option_id = _find_option_id(status_field["options"], REVIEW_STATUS_OPTIONS)
+            option_id = _find_option_id(status_field["options"], status_options)
             if option_id:
                 _update_project_field(
                     gh,
@@ -509,7 +521,7 @@ def _transition_project_fields(gh: str, owner: str, repo: str, issue_number: int
         # Update Needs Action From field
         action_field = project.get("actionField")
         if action_field and action_field.get("options"):
-            option_id = _find_option_id(action_field["options"], (REVIEWER_FIELD_VALUE,))
+            option_id = _find_option_id(action_field["options"], (action_field_value,))
             if option_id:
                 _update_project_field(
                     gh,
@@ -519,8 +531,44 @@ def _transition_project_fields(gh: str, owner: str, repo: str, issue_number: int
                     option_id,
                     issue_number=issue_number,
                     project_title=project_title,
-                    field_name=REVIEWER_FIELD_NAME,
+                    field_name=action_field_name,
                 )
+
+
+def _add_issue_label(gh: str, repo_nwo: str, issue_number: int, label: str) -> None:
+    """Add a label to a GitHub issue. Warns on failure."""
+    try:
+        subprocess.run(  # noqa: S603
+            [gh, "issue", "edit", str(issue_number), "-R", repo_nwo, "--add-label", label],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        logger.info("Added label '%s' to issue #%d", label, issue_number)
+    except subprocess.CalledProcessError as exc:
+        logger.warning("Failed to add label '%s' to issue #%d: %s", label, issue_number, exc.stderr)
+
+
+def transition_issue_to_planning(github_issue_url: str) -> None:
+    """Transition issue to planning state after successful preparation.
+
+    Adds action:develop label and moves to planning column.
+    All failures are logged as warnings, never raised.
+    """
+    gh = _require_gh_cli()
+    owner, repo, issue_number = _parse_issue_url(github_issue_url)
+    repo_nwo = f"{owner}/{repo}"
+
+    _add_issue_label(gh, repo_nwo, issue_number, DEVELOP_LABEL)
+    _transition_project_fields(
+        gh,
+        owner,
+        repo,
+        issue_number,
+        status_options=PLANNING_STATUS_OPTIONS,
+        action_field_value=PLANNER_FIELD_VALUE,
+        action_field_name=PLANNER_FIELD_NAME,
+    )
 
 
 def transition_issue_to_review(github_issue_url: str) -> None:

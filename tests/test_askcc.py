@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 from askcc.cli import _run_claude, main
 from askcc.definitions import AGENT_CONFIGS, AgentAction, AgentConfig, SupportedLanguage
 from askcc.functions import (
+    _add_issue_label,
     _find_option_id,
     _has_acceptance_criteria,
     _has_dependencies_section,
@@ -25,6 +26,7 @@ from askcc.functions import (
     install_skills,
     load_agent_config,
     load_template,
+    transition_issue_to_planning,
     transition_issue_to_review,
     validate_issue_readiness,
     validate_template,
@@ -54,6 +56,8 @@ class TestParseIssueUrl:
 
 
 EXPECTED_TEMPLATE_FILES = {
+    "PREPARE_SYSTEM_PROMPT.md",
+    "PREPARE_USER_PROMPT.md",
     "PLAN_SYSTEM_PROMPT.md",
     "PLAN_USER_PROMPT.md",
     "DEVELOP_SYSTEM_PROMPT.md",
@@ -899,6 +903,112 @@ class TestDevelopTransitionIntegration:
             patch("askcc.cli._run_claude", return_value=(0, None)),
             patch("askcc.cli.transition_issue_to_review") as mock_transition,
             patch("sys.argv", ["askcc", "plan", "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit),
+        ):
+            main()
+
+        mock_transition.assert_not_called()
+
+
+class TestLoadPrepareConfig:
+    def test_load_prepare_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        templates_dir = tmp_path / "templates"
+        monkeypatch.setattr("askcc.functions.TEMPLATES_DIR", templates_dir)
+        bootstrap_templates()
+
+        config = load_agent_config(AgentAction.PREPARE)
+        assert config.action_name == "prepare"
+        assert config.description == "Analyzes a backlog issue for development readiness and suggests improvements"
+
+
+class TestAddIssueLabel:
+    def test_success(self, caplog: pytest.LogCaptureFixture):
+        ok = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        with (
+            caplog.at_level("INFO", logger="askcc.functions"),
+            patch("askcc.functions.subprocess.run", return_value=ok) as mock_run,
+        ):
+            _add_issue_label("/usr/bin/gh", "owner/repo", 42, "action:develop")
+
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        assert "--add-label" in cmd
+        assert "action:develop" in cmd
+        assert "Added label" in caplog.text
+
+    def test_failure_warns(self, caplog: pytest.LogCaptureFixture):
+        with (
+            caplog.at_level("WARNING", logger="askcc.functions"),
+            patch(
+                "askcc.functions.subprocess.run",
+                side_effect=subprocess.CalledProcessError(1, "gh", stderr="label not found"),
+            ),
+        ):
+            _add_issue_label("/usr/bin/gh", "owner/repo", 42, "action:develop")
+
+        assert "Failed to add label" in caplog.text
+
+
+class TestTransitionIssueToPlanningIntegration:
+    ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/42"
+
+    def test_calls_add_label_and_project_transition(self):
+        with (
+            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
+            patch("askcc.functions._add_issue_label") as mock_add,
+            patch("askcc.functions._transition_project_fields") as mock_project,
+        ):
+            transition_issue_to_planning(self.ISSUE_URL)
+
+        mock_add.assert_called_once_with("/usr/bin/gh", "monkut/askcc-cli", 42, "action:develop")
+        mock_project.assert_called_once_with(
+            "/usr/bin/gh",
+            "monkut",
+            "askcc-cli",
+            42,
+            status_options=("planning",),
+            action_field_value="PLANNER",
+            action_field_name="Needs Action From",
+        )
+
+
+class TestPrepareCommand:
+    ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/1"
+
+    def test_prepare_skips_label_validation(self):
+        with (
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.validate_issue_labels") as mock_labels,
+            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
+            patch("askcc.cli._run_claude", return_value=(0, None)),
+            patch("askcc.cli.transition_issue_to_planning"),
+            patch("sys.argv", ["askcc", "prepare", "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit),
+        ):
+            main()
+
+        mock_labels.assert_not_called()
+
+    def test_prepare_success_triggers_planning_transition(self):
+        with (
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
+            patch("askcc.cli._run_claude", return_value=(0, None)),
+            patch("askcc.cli.transition_issue_to_planning") as mock_transition,
+            patch("sys.argv", ["askcc", "prepare", "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit),
+        ):
+            main()
+
+        mock_transition.assert_called_once_with(self.ISSUE_URL)
+
+    def test_prepare_failure_skips_transition(self):
+        with (
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
+            patch("askcc.cli._run_claude", return_value=(1, None)),
+            patch("askcc.cli.transition_issue_to_planning") as mock_transition,
+            patch("sys.argv", ["askcc", "prepare", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
         ):
             main()

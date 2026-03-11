@@ -12,8 +12,13 @@ from urllib.parse import urlparse
 from .definitions import AGENT_CONFIGS, AgentAction, AgentConfig
 from .settings import (
     BLOCKING_LABELS,
+    DEVELOP_LABEL,
     ENABLE_ISSUE_LABEL_PREFIX_VALIDATION,
     REQUIRED_ISSUE_LABEL_PREFIXES,
+    REVIEW_LABEL,
+    REVIEW_STATUS_OPTIONS,
+    REVIEWER_FIELD_NAME,
+    REVIEWER_FIELD_VALUE,
     TEMPLATES_DIR,
 )
 
@@ -334,6 +339,201 @@ def append_usage_to_last_comment(github_issue_url: str, usage: dict) -> None:
         check=True,
     )
     logger.info("Appended token usage to comment %d on issue #%d", comment_id, issue_number)
+
+
+def _swap_issue_labels(gh: str, repo_nwo: str, issue_number: int, *, remove: str, add: str) -> None:
+    """Remove one label and add another on a GitHub issue. Warns on failure."""
+    try:
+        subprocess.run(  # noqa: S603
+            [gh, "issue", "edit", str(issue_number), "-R", repo_nwo, "--remove-label", remove, "--add-label", add],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        logger.info("Transitioned labels: -%s +%s on issue #%d", remove, add, issue_number)
+    except subprocess.CalledProcessError as exc:
+        logger.warning("Failed to transition labels on issue #%d: %s", issue_number, exc.stderr)
+
+
+def _find_option_id(options: list[dict], target_names: tuple[str, ...]) -> str | None:
+    """Find the first matching option ID from a list of single-select options (case-insensitive)."""
+    lower_targets = {n.lower() for n in target_names}
+    for option in options:
+        if option.get("name", "").lower() in lower_targets:
+            return option["id"]
+    return None
+
+
+_PROJECT_ITEMS_QUERY = """
+query($owner: String!, $repo: String!, $number: Int!) {
+  repository(owner: $owner, name: $repo) {
+    issue(number: $number) {
+      projectItems(first: 10) {
+        nodes {
+          id
+          project {
+            id
+            title
+            statusField: field(name: "Status") {
+              ... on ProjectV2SingleSelectField {
+                id
+                options { id name }
+              }
+            }
+            actionField: field(name: "Needs Action From") {
+              ... on ProjectV2SingleSelectField {
+                id
+                options { id name }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
+_UPDATE_FIELD_MUTATION = """
+mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+  updateProjectV2ItemFieldValue(input: {
+    projectId: $projectId,
+    itemId: $itemId,
+    fieldId: $fieldId,
+    value: { singleSelectOptionId: $optionId }
+  }) {
+    projectV2Item { id }
+  }
+}
+"""
+
+
+def _update_project_field(
+    gh: str,
+    project_id: str,
+    item_id: str,
+    field_id: str,
+    option_id: str,
+    *,
+    issue_number: int,
+    project_title: str,
+    field_name: str,
+) -> None:
+    """Update a single-select field on a project item. Warns on failure."""
+    try:
+        subprocess.run(  # noqa: S603
+            [
+                gh,
+                "api",
+                "graphql",
+                "-f",
+                f"query={_UPDATE_FIELD_MUTATION}",
+                "-F",
+                f"projectId={project_id}",
+                "-F",
+                f"itemId={item_id}",
+                "-F",
+                f"fieldId={field_id}",
+                "-F",
+                f"optionId={option_id}",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        logger.info("Updated '%s' in project '%s' for issue #%d", field_name, project_title, issue_number)
+    except subprocess.CalledProcessError as exc:
+        logger.warning(
+            "Failed to update '%s' in project '%s' for issue #%d: %s",
+            field_name,
+            project_title,
+            issue_number,
+            exc.stderr,
+        )
+
+
+def _transition_project_fields(gh: str, owner: str, repo: str, issue_number: int) -> None:
+    """Move issue to review status in project boards. Best-effort, warns on failure."""
+    try:
+        result = subprocess.run(  # noqa: S603
+            [
+                gh,
+                "api",
+                "graphql",
+                "-f",
+                f"query={_PROJECT_ITEMS_QUERY}",
+                "-F",
+                f"owner={owner}",
+                "-F",
+                f"repo={repo}",
+                "-F",
+                f"number={issue_number}",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        logger.warning("Failed to query project items for issue #%d: %s", issue_number, exc.stderr)
+        return
+
+    data = json.loads(result.stdout)
+    items = data.get("data", {}).get("repository", {}).get("issue", {}).get("projectItems", {}).get("nodes") or []
+
+    if not items:
+        logger.info("Issue #%d is not in any project, skipping project transitions", issue_number)
+        return
+
+    for item in items:
+        project = item.get("project", {})
+        project_id = project.get("id")
+        item_id = item.get("id")
+        project_title = project.get("title", "unknown")
+
+        # Update Status field
+        status_field = project.get("statusField")
+        if status_field and status_field.get("options"):
+            option_id = _find_option_id(status_field["options"], REVIEW_STATUS_OPTIONS)
+            if option_id:
+                _update_project_field(
+                    gh,
+                    project_id,
+                    item_id,
+                    status_field["id"],
+                    option_id,
+                    issue_number=issue_number,
+                    project_title=project_title,
+                    field_name="Status",
+                )
+
+        # Update Needs Action From field
+        action_field = project.get("actionField")
+        if action_field and action_field.get("options"):
+            option_id = _find_option_id(action_field["options"], (REVIEWER_FIELD_VALUE,))
+            if option_id:
+                _update_project_field(
+                    gh,
+                    project_id,
+                    item_id,
+                    action_field["id"],
+                    option_id,
+                    issue_number=issue_number,
+                    project_title=project_title,
+                    field_name=REVIEWER_FIELD_NAME,
+                )
+
+
+def transition_issue_to_review(github_issue_url: str) -> None:
+    """Transition issue labels and project state after successful PR creation.
+
+    All failures are logged as warnings, never raised.
+    """
+    gh = _require_gh_cli()
+    owner, repo, issue_number = _parse_issue_url(github_issue_url)
+    repo_nwo = f"{owner}/{repo}"
+
+    _swap_issue_labels(gh, repo_nwo, issue_number, remove=DEVELOP_LABEL, add=REVIEW_LABEL)
+    _transition_project_fields(gh, owner, repo, issue_number)
 
 
 def load_agent_config(agent: AgentAction) -> AgentConfig:

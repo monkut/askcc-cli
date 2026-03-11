@@ -14,6 +14,15 @@ BLOCKING_LABELS: tuple[str, ...] = (DECISION_ISSUE_LABEL, "blocked")
 ENABLE_ISSUE_LABEL_PREFIX_VALIDATION: bool = os.getenv("ENABLE_ISSUE_LABEL_PREFIX_VALIDATION", "true").lower() == "true"
 REQUIRED_ISSUE_LABEL_PREFIXES: tuple[str, ...] = ("action:",)
 
+# Label transition
+DEVELOP_LABEL = "action:develop"
+REVIEW_LABEL = "action:review"
+
+# Project field transition
+REVIEW_STATUS_OPTIONS: tuple[str, ...] = ("in-internal-review", "in-review")
+REVIEWER_FIELD_NAME = "Needs Action From"
+REVIEWER_FIELD_VALUE = "REVIEWER"
+
 ASKCC_HOME: Path = Path(os.getenv("ASKCC_HOME") or str(Path.home() / ".askcc")).expanduser().resolve()
 TEMPLATES_DIR: Path = ASKCC_HOME / "templates"
 LOG_DIR: Path = ASKCC_HOME / "logs"

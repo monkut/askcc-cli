@@ -14,14 +14,18 @@ if TYPE_CHECKING:
 from askcc.cli import _run_claude, main
 from askcc.definitions import AGENT_CONFIGS, AgentAction, AgentConfig, SupportedLanguage
 from askcc.functions import (
+    _find_option_id,
     _has_acceptance_criteria,
     _has_dependencies_section,
     _parse_issue_url,
+    _swap_issue_labels,
+    _transition_project_fields,
     append_usage_to_last_comment,
     bootstrap_templates,
     install_skills,
     load_agent_config,
     load_template,
+    transition_issue_to_review,
     validate_issue_readiness,
     validate_template,
 )
@@ -664,9 +668,239 @@ class TestDevelopSkipValidation:
             patch("askcc.cli.validate_issue_readiness") as mock_validate,
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
             patch("askcc.cli._run_claude", return_value=(0, None)),
+            patch("askcc.cli.transition_issue_to_review"),
             patch("sys.argv", ["askcc", "develop", "--skip-validation", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
         ):
             main()
 
         mock_validate.assert_not_called()
+
+
+class TestFindOptionId:
+    def test_finds_matching_option(self):
+        options = [{"id": "opt1", "name": "Todo"}, {"id": "opt2", "name": "in-review"}]
+        assert _find_option_id(options, ("in-internal-review", "in-review")) == "opt2"
+
+    def test_case_insensitive(self):
+        options = [{"id": "opt1", "name": "In-Review"}]
+        assert _find_option_id(options, ("in-review",)) == "opt1"
+
+    def test_returns_first_match(self):
+        options = [
+            {"id": "opt1", "name": "in-internal-review"},
+            {"id": "opt2", "name": "in-review"},
+        ]
+        assert _find_option_id(options, ("in-internal-review", "in-review")) == "opt1"
+
+    def test_no_match_returns_none(self):
+        options = [{"id": "opt1", "name": "Todo"}, {"id": "opt2", "name": "Done"}]
+        assert _find_option_id(options, ("in-review",)) is None
+
+    def test_empty_options(self):
+        assert _find_option_id([], ("in-review",)) is None
+
+
+class TestSwapIssueLabels:
+    def test_success(self, caplog: pytest.LogCaptureFixture):
+        ok = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        with (
+            caplog.at_level("INFO", logger="askcc.functions"),
+            patch("askcc.functions.subprocess.run", return_value=ok) as mock_run,
+        ):
+            _swap_issue_labels("/usr/bin/gh", "owner/repo", 42, remove="action:develop", add="action:review")
+
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        assert "--remove-label" in cmd
+        assert "--add-label" in cmd
+        assert "Transitioned labels" in caplog.text
+
+    def test_failure_warns(self, caplog: pytest.LogCaptureFixture):
+        with (
+            caplog.at_level("WARNING", logger="askcc.functions"),
+            patch(
+                "askcc.functions.subprocess.run",
+                side_effect=subprocess.CalledProcessError(1, "gh", stderr="label not found"),
+            ),
+        ):
+            _swap_issue_labels("/usr/bin/gh", "owner/repo", 42, remove="action:develop", add="action:review")
+
+        assert "Failed to transition labels" in caplog.text
+
+
+class TestTransitionProjectFields:
+    def _graphql_response(self, nodes: list[dict]) -> str:
+        return json.dumps({"data": {"repository": {"issue": {"projectItems": {"nodes": nodes}}}}})
+
+    def test_no_project_items(self, caplog: pytest.LogCaptureFixture):
+        result = subprocess.CompletedProcess(args=[], returncode=0, stdout=self._graphql_response([]), stderr="")
+        with (
+            caplog.at_level("INFO", logger="askcc.functions"),
+            patch("askcc.functions.subprocess.run", return_value=result),
+        ):
+            _transition_project_fields("/usr/bin/gh", "owner", "repo", 42)
+
+        assert "not in any project" in caplog.text
+
+    def test_updates_status_and_action_fields(self, caplog: pytest.LogCaptureFixture):
+        nodes = [
+            {
+                "id": "item-1",
+                "project": {
+                    "id": "proj-1",
+                    "title": "My Board",
+                    "statusField": {
+                        "id": "field-status",
+                        "options": [
+                            {"id": "opt-todo", "name": "Todo"},
+                            {"id": "opt-review", "name": "in-review"},
+                        ],
+                    },
+                    "actionField": {
+                        "id": "field-action",
+                        "options": [
+                            {"id": "opt-dev", "name": "DEVELOPER"},
+                            {"id": "opt-rev", "name": "REVIEWER"},
+                        ],
+                    },
+                },
+            }
+        ]
+        query_result = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=self._graphql_response(nodes), stderr=""
+        )
+        mutation_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="{}", stderr="")
+
+        with (
+            caplog.at_level("INFO", logger="askcc.functions"),
+            patch("askcc.functions.subprocess.run", side_effect=[query_result, mutation_result, mutation_result]),
+        ):
+            _transition_project_fields("/usr/bin/gh", "owner", "repo", 42)
+
+        assert "Updated 'Status' in project 'My Board'" in caplog.text
+        assert "Updated 'Needs Action From' in project 'My Board'" in caplog.text
+
+    def test_skips_missing_fields(self, caplog: pytest.LogCaptureFixture):
+        nodes = [
+            {
+                "id": "item-1",
+                "project": {
+                    "id": "proj-1",
+                    "title": "Simple Board",
+                    "statusField": None,
+                    "actionField": None,
+                },
+            }
+        ]
+        query_result = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=self._graphql_response(nodes), stderr=""
+        )
+        with (
+            caplog.at_level("INFO", logger="askcc.functions"),
+            patch("askcc.functions.subprocess.run", return_value=query_result) as mock_run,
+        ):
+            _transition_project_fields("/usr/bin/gh", "owner", "repo", 42)
+
+        # Only the query call, no mutation calls
+        mock_run.assert_called_once()
+
+    def test_skips_unmatched_status_options(self):
+        nodes = [
+            {
+                "id": "item-1",
+                "project": {
+                    "id": "proj-1",
+                    "title": "Board",
+                    "statusField": {
+                        "id": "field-status",
+                        "options": [{"id": "opt-todo", "name": "Todo"}, {"id": "opt-done", "name": "Done"}],
+                    },
+                    "actionField": None,
+                },
+            }
+        ]
+        query_result = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=self._graphql_response(nodes), stderr=""
+        )
+        with patch("askcc.functions.subprocess.run", return_value=query_result) as mock_run:
+            _transition_project_fields("/usr/bin/gh", "owner", "repo", 42)
+
+        mock_run.assert_called_once()
+
+    def test_query_failure_warns(self, caplog: pytest.LogCaptureFixture):
+        with (
+            caplog.at_level("WARNING", logger="askcc.functions"),
+            patch(
+                "askcc.functions.subprocess.run",
+                side_effect=subprocess.CalledProcessError(1, "gh", stderr="graphql error"),
+            ),
+        ):
+            _transition_project_fields("/usr/bin/gh", "owner", "repo", 42)
+
+        assert "Failed to query project items" in caplog.text
+
+
+class TestTransitionIssueToReview:
+    ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/42"
+
+    def test_calls_label_swap_and_project_transition(self):
+        with (
+            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
+            patch("askcc.functions._swap_issue_labels") as mock_swap,
+            patch("askcc.functions._transition_project_fields") as mock_project,
+        ):
+            transition_issue_to_review(self.ISSUE_URL)
+
+        mock_swap.assert_called_once_with(
+            "/usr/bin/gh", "monkut/askcc-cli", 42, remove="action:develop", add="action:review"
+        )
+        mock_project.assert_called_once_with("/usr/bin/gh", "monkut", "askcc-cli", 42)
+
+
+class TestDevelopTransitionIntegration:
+    ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/1"
+
+    def test_develop_success_triggers_transition(self):
+        with (
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.validate_issue_labels", return_value=[]),
+            patch("askcc.cli.validate_issue_readiness", return_value=[]),
+            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
+            patch("askcc.cli._run_claude", return_value=(0, None)),
+            patch("askcc.cli.transition_issue_to_review") as mock_transition,
+            patch("sys.argv", ["askcc", "develop", "--skip-validation", "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit),
+        ):
+            main()
+
+        mock_transition.assert_called_once_with(self.ISSUE_URL)
+
+    def test_develop_failure_skips_transition(self):
+        with (
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.validate_issue_labels", return_value=[]),
+            patch("askcc.cli.validate_issue_readiness", return_value=[]),
+            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
+            patch("askcc.cli._run_claude", return_value=(1, None)),
+            patch("askcc.cli.transition_issue_to_review") as mock_transition,
+            patch("sys.argv", ["askcc", "develop", "--skip-validation", "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit),
+        ):
+            main()
+
+        mock_transition.assert_not_called()
+
+    def test_plan_success_skips_transition(self):
+        with (
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.validate_issue_labels", return_value=[]),
+            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
+            patch("askcc.cli._run_claude", return_value=(0, None)),
+            patch("askcc.cli.transition_issue_to_review") as mock_transition,
+            patch("sys.argv", ["askcc", "plan", "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit),
+        ):
+            main()
+
+        mock_transition.assert_not_called()

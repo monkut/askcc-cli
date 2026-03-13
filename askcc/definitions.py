@@ -6,6 +6,11 @@ from askcc.settings import DECISION_ISSUE_LABEL
 DECISION_GUIDANCE = f"""\
 
 Decision handling:
+- Before starting your analysis, check if the issue already has the `{DECISION_ISSUE_LABEL}` label \
+by running `gh issue view <number> --json labels`. \
+If the label is already present, a decision is pending and no new action can be taken — \
+do NOT post a new comment. Stop immediately.
+
 - When your analysis reveals unresolved ambiguities, competing approaches, or choices that depend on \
 project priorities you cannot determine, include a structured decision block in your comment:
 
@@ -134,7 +139,7 @@ Branching:
 Pre-check:
 - Before starting implementation, check if the issue has the `{DECISION_ISSUE_LABEL}` label \
 by running `gh issue view <number> --json labels`. \
-If the label is present, post a comment stating that implementation is blocked pending a decision and stop.
+If the label is present, a decision is pending — stop immediately without posting a comment.
 
 Implementation:
 - Read the issue's planned implementation (in comments) before writing code.

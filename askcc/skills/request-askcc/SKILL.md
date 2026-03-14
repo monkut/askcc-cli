@@ -9,9 +9,9 @@ Use the `askcc` tool to request processing of GitHub issues defined by a URL.
 
 ## Instructions
 
-- When a user asks to PREPARE a backlog issue for development readiness, use `askcc prepare`.
+- When a user asks to PREPARE a backlog issue (flesh out acceptance criteria, dependencies, and estimates to get it ready for planning), use `askcc prepare`.
 - When a user asks to VALIDATE an issue's readiness for development, use `askcc validate`.
-- When a user asks to PLAN an implementation of a given GitHub issue, use `askcc plan`.
+- When a user asks to PLAN an implementation of a prepared GitHub issue (produce step-by-step implementation tasks against the codebase), use `askcc plan`.
 - When a user asks to DEVELOP a planned implementation defined in a given GitHub issue, use `askcc develop`.
 - When a user asks to REVIEW a github issue, use `askcc review`.
 - When a user asks to EXPLORE a github issue (investigate and propose solutions), use `askcc explore`.
@@ -23,7 +23,7 @@ Use the `askcc` tool to request processing of GitHub issues defined by a URL.
 - "Prepare https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1"
 
   ```bash
-  # This analyzes a backlog issue for development readiness, suggests acceptance criteria, identifies dependencies, and suggests an estimate.
+  # This fleshes out a backlog issue by suggesting acceptance criteria, identifying dependencies, and proposing an estimate to get it ready for planning.
   askcc prepare --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
   ```
 
@@ -37,7 +37,7 @@ Use the `askcc` tool to request processing of GitHub issues defined by a URL.
 - "Plan https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1"
 
   ```bash
-  # This fetches the github issue and plans how to implement it for future development.
+  # This analyzes a prepared issue against the codebase and produces a step-by-step implementation plan.
   askcc plan --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
   ```
 

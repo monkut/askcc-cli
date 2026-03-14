@@ -129,25 +129,38 @@ include a structured decision block in your comment instead of assuming an answe
     + """
 Keep the plan minimal and actionable. Do not propose changes beyond what the issue requires.
 
-IMPORTANT: You MUST post your complete plan as a comment on the GitHub issue using the gh CLI. \
-Extract the issue URL from the provided issue content and use `gh issue comment <url> --body "<your plan>"`. \
-Do NOT skip this step — the comment is the primary deliverable of this task.
+IMPORTANT: You MUST perform two actions — update the issue description AND post a summary comment.
 
-## Issue Body Update (develop-readiness)
+## Issue Description Update
 
-After posting the plan comment, you MUST also update the GitHub issue body to ensure it passes \
-develop-readiness validation. Use the gh CLI to append the following sections to the issue body \
-if they are not already present:
+First, read the current issue body and all comments with `gh issue view <url> --json body,comments`. \
+Analyze the existing description and comment history to understand what has already been discussed, \
+decided, or proposed (e.g., answers to open questions from a prepare step).
 
-1. **Acceptance Criteria** — Add a `## Acceptance Criteria` section containing a checklist \
-(using `- [ ]` markdown checkboxes) of concrete, verifiable conditions derived from your plan.
-2. **Dependencies** — Add a `## Dependencies` section listing any dependencies, prerequisites, \
-blockers, or relevant context. If there are none, still include the heading with "None identified."
-3. **Assignee** — Assign the issue to the authenticated user using `gh issue edit <url> --add-assignee "@me"`.
+Then rewrite the GitHub issue body to be development-ready using `gh issue edit <url> --body "<updated body>"`. \
+The updated description should clearly define what needs to be built, incorporating decisions and \
+clarifications from the comment history. Include the following sections:
 
-To update the issue body, first read the current body with `gh issue view <url> --json body -q .body`, \
-then append the missing sections and update with `gh issue edit <url> --body "<updated body>"`. \
-Preserve all existing content in the issue body — only append new sections.
+1. **Acceptance Criteria** — Replace any existing `## Acceptance Criteria` section \
+(including `<!-- draft -->` variants from a prepare step) with a finalized \
+`## Acceptance Criteria` section containing a checklist (using `- [ ]` markdown checkboxes) \
+of concrete, verifiable conditions derived from your plan.
+2. **Dependencies** — Replace any existing `## Dependencies` section \
+(including `<!-- draft -->` variants) with a finalized `## Dependencies` section \
+listing any dependencies, prerequisites, blockers, or relevant context. \
+If there are none, still include the heading with "None identified."
+3. **Implementation Plan** — Add a `## Implementation Plan` section containing \
+your step-by-step implementation tasks, each referencing specific files and functions.
+4. **Assignee** — Assign the issue to the authenticated user using `gh issue edit <url> --add-assignee "@me"`.
+
+## Summary Comment
+
+After updating the description, post a comment on the issue summarizing:
+- What sections were added or updated in the issue description
+- Risks or open questions (if any)
+
+The comment serves as an activity log entry — keep it concise. \
+Use `gh issue comment <url> --body "<your summary>"`.
 """
 )
 
@@ -379,7 +392,7 @@ REVIEW_USER_PROMPT_TEMPLATE = (
 
 PLAN_USER_PROMPT_TEMPLATE = (
     "Analyze the following GitHub issue and produce an implementation plan."
-    " You MUST post your complete plan as a comment on the GitHub issue using the gh CLI."
+    " You MUST update the issue description and post a summary comment using the gh CLI."
     "\n\n$issue_content"
 )
 DEVELOP_USER_PROMPT_TEMPLATE = (

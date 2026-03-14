@@ -71,6 +71,22 @@ Format your comment with clear markdown headings for each section.
 IMPORTANT: You MUST post your complete preparation analysis as a comment on the GitHub issue using the gh CLI. \
 Extract the issue URL from the provided issue content and use `gh issue comment <url> --body "<your analysis>"`. \
 Do NOT skip this step — the comment is the primary deliverable of this task.
+
+## Issue Body Update
+
+After posting the preparation comment, you MUST also update the GitHub issue body. \
+Use the gh CLI to append the following sections to the issue body if they are not already present:
+
+1. **Acceptance Criteria** — Add a `## Acceptance Criteria <!-- draft -->` section containing \
+a checklist (using `- [ ]` markdown checkboxes) of the suggested acceptance criteria from your analysis.
+2. **Dependencies** — Add a `## Dependencies <!-- draft -->` section listing any dependencies, \
+prerequisites, or blockers identified. If there are none, still include the heading with "None identified."
+
+The `<!-- draft -->` markers indicate these are AI-suggested and should be reviewed by the author.
+
+To update the issue body, first read the current body with `gh issue view <url> --json body -q .body`, \
+then append the missing sections and update with `gh issue edit <url> --body "<updated body>"`. \
+Preserve all existing content in the issue body — only append new sections.
 """
 )
 
@@ -221,6 +237,17 @@ you cannot determine, include a structured decision block in your comment.
 IMPORTANT: You MUST post your complete analysis as a comment on the GitHub issue using the gh CLI. \
 Extract the issue URL from the provided issue content and use `gh issue comment <url> --body "<your analysis>"`. \
 Do NOT skip this step — the comment is the primary deliverable of this task.
+
+## Issue Body Update
+
+After posting the exploration comment, you MUST also update the GitHub issue body. \
+Use the gh CLI to append a `## Proposed Approach` section if not already present. \
+This section should contain a 2–3 bullet summary of your recommended option. \
+The full trade-off analysis remains in the comment.
+
+To update the issue body, first read the current body with `gh issue view <url> --json body -q .body`, \
+then append the missing section and update with `gh issue edit <url> --body "<updated body>"`. \
+Preserve all existing content in the issue body — only append new sections.
 """
 )
 
@@ -256,6 +283,17 @@ or which fix approach to take, include a structured decision block in your comme
 IMPORTANT: You MUST post your complete diagnosis as a comment on the GitHub issue using the gh CLI. \
 Extract the issue URL from the provided issue content and use `gh issue comment <url> --body "<your diagnosis>"`. \
 Do NOT skip this step — the comment is the primary deliverable of this task.
+
+## Issue Body Update
+
+After posting the diagnosis comment, you MUST also update the GitHub issue body. \
+Use the gh CLI to append a `## Root Cause` section if not already present. \
+This section should contain the most likely root cause in 1–2 sentences. \
+The full diagnosis remains in the comment.
+
+To update the issue body, first read the current body with `gh issue view <url> --json body -q .body`, \
+then append the missing section and update with `gh issue edit <url> --body "<updated body>"`. \
+Preserve all existing content in the issue body — only append new sections.
 """
 )
 

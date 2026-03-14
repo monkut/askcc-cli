@@ -137,9 +137,9 @@ First, read the current issue body and all comments with `gh issue view <url> --
 Analyze the existing description and comment history to understand what has already been discussed, \
 decided, or proposed (e.g., answers to open questions from a prepare step).
 
-Then update the GitHub issue body using `gh issue edit <url> --body "<updated body>"`. \
-Preserve all original issue content (everything above any AI-added sections). \
-Replace or add the following sections based on your plan:
+Then rewrite the GitHub issue body to be development-ready using `gh issue edit <url> --body "<updated body>"`. \
+The updated description should clearly define what needs to be built, incorporating decisions and \
+clarifications from the comment history. Include the following sections:
 
 1. **Acceptance Criteria** — Replace any existing `## Acceptance Criteria` section \
 (including `<!-- draft -->` variants from a prepare step) with a finalized \

@@ -157,7 +157,6 @@ your step-by-step implementation tasks, each referencing specific files and func
 
 After updating the description, post a comment on the issue summarizing:
 - What sections were added or updated in the issue description
-- Key implementation steps and affected files
 - Risks or open questions (if any)
 
 The comment serves as an activity log entry — keep it concise. \

@@ -68,9 +68,33 @@ include a structured decision block in your comment.
     + """
 Format your comment with clear markdown headings for each section.
 
-IMPORTANT: You MUST post your complete preparation analysis as a comment on the GitHub issue using the gh CLI. \
-Extract the issue URL from the provided issue content and use `gh issue comment <url> --body "<your analysis>"`. \
-Do NOT skip this step — the comment is the primary deliverable of this task.
+IMPORTANT: You MUST perform two actions — update the issue description AND post a summary comment.
+
+## Issue Description Update
+
+Update the GitHub issue body to append the following sections if not already present:
+
+1. **Acceptance Criteria** — Add a `## Acceptance Criteria <!-- draft -->` section containing \
+a checklist (using `- [ ]` markdown checkboxes) of the suggested acceptance criteria from your analysis.
+2. **Dependencies** — Add a `## Dependencies <!-- draft -->` section listing any dependencies, \
+prerequisites, or blockers identified. If there are none, still include the heading with "None identified."
+
+The `<!-- draft -->` markers indicate these are AI-suggested and should be reviewed by the author.
+
+To update the issue body, first read the current body with `gh issue view <url> --json body -q .body`, \
+then append the missing sections and update with `gh issue edit <url> --body "<updated body>"`. \
+Preserve all existing content in the issue body — only append new sections.
+
+## Summary Comment
+
+After updating the description, post a comment on the issue summarizing:
+- What sections were added or updated in the issue description
+- Readiness assessment and current status
+- Estimate suggestion with brief justification
+- Open questions for the author (if any)
+
+The comment serves as an activity log entry — keep it concise. \
+Use `gh issue comment <url> --body "<your summary>"`.
 """
 )
 
@@ -78,7 +102,7 @@ PREPARE_USER_PROMPT_TEMPLATE = (
     "Analyze the following GitHub issue for development readiness."
     " Assess completeness, suggest acceptance criteria, identify dependencies,"
     " suggest an estimate label, and list any questions for the author."
-    " You MUST post your complete preparation analysis as a comment on the GitHub issue using the gh CLI."
+    " You MUST update the issue description and post a summary comment using the gh CLI."
     "\n\n$issue_content"
 )
 
@@ -218,16 +242,33 @@ you cannot determine, include a structured decision block in your comment.
 """
     + DECISION_GUIDANCE
     + """
-IMPORTANT: You MUST post your complete analysis as a comment on the GitHub issue using the gh CLI. \
-Extract the issue URL from the provided issue content and use `gh issue comment <url> --body "<your analysis>"`. \
-Do NOT skip this step — the comment is the primary deliverable of this task.
+IMPORTANT: You MUST perform two actions — update the issue description AND post a summary comment.
+
+## Issue Description Update
+
+Update the GitHub issue body to append a `## Proposed Approach` section if not already present. \
+This section should contain a 2–3 bullet summary of your recommended option.
+
+To update the issue body, first read the current body with `gh issue view <url> --json body -q .body`, \
+then append the missing section and update with `gh issue edit <url> --body "<updated body>"`. \
+Preserve all existing content in the issue body — only append new sections.
+
+## Summary Comment
+
+After updating the description, post a comment on the issue summarizing:
+- What sections were added or updated in the issue description
+- The recommended approach and key trade-offs considered
+- Open questions or risks that need clarification
+
+The comment serves as an activity log entry — keep it concise. \
+Use `gh issue comment <url> --body "<your summary>"`.
 """
 )
 
 EXPLORE_USER_PROMPT_TEMPLATE = (
     "Investigate the following GitHub issue, research the codebase,"
     " and propose best-practice solutions with trade-offs."
-    " You MUST post your complete analysis as a comment on the GitHub issue using the gh CLI."
+    " You MUST update the issue description and post a summary comment using the gh CLI."
     "\n\n$issue_content"
 )
 
@@ -253,16 +294,33 @@ or which fix approach to take, include a structured decision block in your comme
 """
     + DECISION_GUIDANCE
     + """
-IMPORTANT: You MUST post your complete diagnosis as a comment on the GitHub issue using the gh CLI. \
-Extract the issue URL from the provided issue content and use `gh issue comment <url> --body "<your diagnosis>"`. \
-Do NOT skip this step — the comment is the primary deliverable of this task.
+IMPORTANT: You MUST perform two actions — update the issue description AND post a summary comment.
+
+## Issue Description Update
+
+Update the GitHub issue body to append a `## Root Cause` section if not already present. \
+This section should contain the most likely root cause in 1–2 sentences.
+
+To update the issue body, first read the current body with `gh issue view <url> --json body -q .body`, \
+then append the missing section and update with `gh issue edit <url> --body "<updated body>"`. \
+Preserve all existing content in the issue body — only append new sections.
+
+## Summary Comment
+
+After updating the description, post a comment on the issue summarizing:
+- What sections were added or updated in the issue description
+- Diagnostic findings and current status
+- Unknowns and information requests for the reporter
+
+The comment serves as an activity log entry — keep it concise. \
+Use `gh issue comment <url> --body "<your summary>"`.
 """
 )
 
 DIAGNOSE_USER_PROMPT_TEMPLATE = (
     "Investigate the following reported issue, identify potential causes,"
     " and request any additional information needed to confirm the diagnosis."
-    " You MUST post your complete diagnosis as a comment on the GitHub issue using the gh CLI."
+    " You MUST update the issue description and post a summary comment using the gh CLI."
     "\n\n$issue_content"
 )
 

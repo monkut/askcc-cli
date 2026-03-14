@@ -1,14 +1,16 @@
 ---
 name: request-askcc
-description: Request REVIEW, REVIEWPR, PLAN, DEVELOP, EXPLORE or DIAGNOSE actions for GitHub issues via the askcc CLI. Use when a user asks to review, plan, develop, explore, diagnose, or review a PR for a GitHub issue.
+description: Request PREPARE, VALIDATE, REVIEW, REVIEWPR, PLAN, DEVELOP, EXPLORE or DIAGNOSE actions for GitHub issues via the askcc CLI. Use when a user asks to prepare, validate, review, plan, develop, explore, diagnose, or review a PR for a GitHub issue.
 ---
 
 # Request GitHub Issue Action
 
-Use the `askcc` tool to request processing (plan or develop) of GitHub issues defined by a URL.
+Use the `askcc` tool to request processing of GitHub issues defined by a URL.
 
 ## Instructions
 
+- When a user asks to PREPARE a backlog issue for development readiness, use `askcc prepare`.
+- When a user asks to VALIDATE an issue's readiness for development, use `askcc validate`.
 - When a user asks to PLAN an implementation of a given GitHub issue, use `askcc plan`.
 - When a user asks to DEVELOP a planned implementation defined in a given GitHub issue, use `askcc develop`.
 - When a user asks to REVIEW a github issue, use `askcc review`.
@@ -17,6 +19,20 @@ Use the `askcc` tool to request processing (plan or develop) of GitHub issues de
 - When a user asks to REVIEW a PR (code review of a pull request linked to an issue), use `askcc reviewpr`.
 
 ## Examples
+
+- "Prepare https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1"
+
+  ```bash
+  # This analyzes a backlog issue for development readiness, suggests acceptance criteria, identifies dependencies, and suggests an estimate.
+  askcc prepare --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
+  ```
+
+- "Validate https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1"
+
+  ```bash
+  # This checks whether a GitHub issue meets readiness criteria for development (acceptance criteria, dependencies, assignee, etc.).
+  askcc validate --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
+  ```
 
 - "Plan https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1"
 

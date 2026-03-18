@@ -14,14 +14,10 @@ from .settings import (
     BLOCKING_LABELS,
     DEVELOP_LABEL,
     ENABLE_ISSUE_LABEL_PREFIX_VALIDATION,
-    PLANNER_FIELD_NAME,
-    PLANNER_FIELD_VALUE,
     PLANNING_STATUS_OPTIONS,
     REQUIRED_ISSUE_LABEL_PREFIXES,
     REVIEW_LABEL,
     REVIEW_STATUS_OPTIONS,
-    REVIEWER_FIELD_NAME,
-    REVIEWER_FIELD_VALUE,
     TEMPLATES_DIR,
 )
 
@@ -474,12 +470,6 @@ query($owner: String!, $repo: String!, $number: Int!) {
                 options { id name }
               }
             }
-            actionField: field(name: "Needs Action From") {
-              ... on ProjectV2SingleSelectField {
-                id
-                options { id name }
-              }
-            }
           }
         }
       }
@@ -553,8 +543,6 @@ def _transition_project_fields(
     issue_number: int,
     *,
     status_options: tuple[str, ...] = REVIEW_STATUS_OPTIONS,
-    action_field_value: str = REVIEWER_FIELD_VALUE,
-    action_field_name: str = REVIEWER_FIELD_NAME,
 ) -> None:
     """Move issue to a target status in project boards. Best-effort, warns on failure."""
     try:
@@ -609,22 +597,6 @@ def _transition_project_fields(
                     field_name="Status",
                 )
 
-        # Update Needs Action From field
-        action_field = project.get("actionField")
-        if action_field and action_field.get("options"):
-            option_id = _find_option_id(action_field["options"], (action_field_value,))
-            if option_id:
-                _update_project_field(
-                    gh,
-                    project_id,
-                    item_id,
-                    action_field["id"],
-                    option_id,
-                    issue_number=issue_number,
-                    project_title=project_title,
-                    field_name=action_field_name,
-                )
-
 
 def _add_issue_label(gh: str, repo_nwo: str, issue_number: int, label: str) -> None:
     """Add a label to a GitHub issue. Warns on failure."""
@@ -657,8 +629,6 @@ def transition_issue_to_planning(github_issue_url: str) -> None:
         repo,
         issue_number,
         status_options=PLANNING_STATUS_OPTIONS,
-        action_field_value=PLANNER_FIELD_VALUE,
-        action_field_name=PLANNER_FIELD_NAME,
     )
 
 

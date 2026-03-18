@@ -17,7 +17,6 @@ from .functions import (
     fetch_pr_content,
     install_skills,
     load_agent_config,
-    short_issue_id,
     transition_issue_to_planning,
     transition_issue_to_review,
     validate_issue_labels,
@@ -210,23 +209,23 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
                 logger.error(error)
             sys.exit(1)
 
-    agent = AgentAction(args.command)
+    action = AgentAction(args.command)
 
-    if agent == AgentAction.DEVELOP and not args.skip_validation:
+    if action == AgentAction.DEVELOP and not args.skip_validation:
         checks = validate_issue_readiness(args.github_issue_url)
         if not all(c.passed for c in checks):
             _print_validation_report(args.github_issue_url, checks)
             logger.error("Issue readiness validation failed. Use --skip-validation to bypass.")
             sys.exit(1)
 
-    issue_id = short_issue_id(args.github_issue_url)
+    issue_id = args.github_issue_url
     cwd = (args.cwd or Path.cwd()).resolve()
-    config = load_agent_config(agent)
+    config = load_agent_config(action)
     issue_content = fetch_github_issue(args.github_issue_url)
     try:
-        prompt = _build_prompt(agent, config, issue_content, args.github_issue_url, issue_id)
+        prompt = _build_prompt(action, config, issue_content, args.github_issue_url, issue_id)
     except ValueError:
-        logger.exception("[%s] Failed to build prompt for '%s'", issue_id, agent.value)
+        logger.exception("[%s] Failed to build prompt for '%s'", issue_id, action.value)
         sys.exit(1)
     if args.language != SupportedLanguage.ENGLISH:
         prompt += f"\nOutput all comments in {args.language}."
@@ -235,7 +234,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
     if usage:
         append_usage_to_last_comment(args.github_issue_url, usage)
 
-    if agent == AgentAction.DEVELOP:
+    if action == AgentAction.DEVELOP:
         # Post-develop: check if any changes were produced
         git_result = subprocess.run(  # noqa: S603
             ["git", "status", "--porcelain"],  # noqa: S607
@@ -261,10 +260,10 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
         elif wt_result.stdout.strip():
             logger.debug("[%s] Git worktrees:\n%s", issue_id, wt_result.stdout.strip())
 
-    if agent == AgentAction.PREPARE and return_code == 0:
+    if action == AgentAction.PREPARE and return_code == 0:
         transition_issue_to_planning(args.github_issue_url)
 
-    if agent == AgentAction.DEVELOP and return_code == 0:
+    if action == AgentAction.DEVELOP and return_code == 0:
         transition_issue_to_review(args.github_issue_url)
 
     sys.exit(return_code)

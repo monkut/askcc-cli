@@ -709,23 +709,41 @@ class TestSwapIssueLabels:
         ):
             _swap_issue_labels("/usr/bin/gh", "owner/repo", 42, remove="action:develop", add="action:review")
 
-        mock_run.assert_called_once()
-        cmd = mock_run.call_args[0][0]
-        assert "--remove-label" in cmd
-        assert "--add-label" in cmd
+        assert mock_run.call_count == 2
+        add_cmd = mock_run.call_args_list[0][0][0]
+        remove_cmd = mock_run.call_args_list[1][0][0]
+        assert "--add-label" in add_cmd
+        assert "--remove-label" not in add_cmd
+        assert "--remove-label" in remove_cmd
+        assert "--add-label" not in remove_cmd
         assert "Transitioned labels" in caplog.text
 
-    def test_failure_warns(self, caplog: pytest.LogCaptureFixture):
+    def test_add_failure_skips_remove(self, caplog: pytest.LogCaptureFixture):
         with (
             caplog.at_level("WARNING", logger="askcc.functions"),
             patch(
                 "askcc.functions.subprocess.run",
                 side_effect=subprocess.CalledProcessError(1, "gh", stderr="label not found"),
-            ),
+            ) as mock_run,
         ):
             _swap_issue_labels("/usr/bin/gh", "owner/repo", 42, remove="action:develop", add="action:review")
 
-        assert "Failed to transition labels" in caplog.text
+        mock_run.assert_called_once()  # only the add call, remove never attempted
+        assert "Failed to add label" in caplog.text
+
+    def test_remove_failure_warns(self, caplog: pytest.LogCaptureFixture):
+        ok = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        with (
+            caplog.at_level("WARNING", logger="askcc.functions"),
+            patch(
+                "askcc.functions.subprocess.run",
+                side_effect=[ok, subprocess.CalledProcessError(1, "gh", stderr="label not found")],
+            ) as mock_run,
+        ):
+            _swap_issue_labels("/usr/bin/gh", "owner/repo", 42, remove="action:develop", add="action:review")
+
+        assert mock_run.call_count == 2
+        assert "Failed to remove label" in caplog.text
 
 
 class TestTransitionProjectFields:

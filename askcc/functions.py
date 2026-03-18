@@ -432,17 +432,32 @@ def append_usage_to_last_comment(github_issue_url: str, usage: dict) -> None:
 
 
 def _swap_issue_labels(gh: str, repo_nwo: str, issue_number: int, *, remove: str, add: str) -> None:
-    """Remove one label and add another on a GitHub issue. Warns on failure."""
+    """Remove one label and add another on a GitHub issue.
+
+    Adds the new label first, then removes the old one only on success.
+    This prevents the issue from being left with no label if the target label doesn't exist.
+    """
     try:
         subprocess.run(  # noqa: S603
-            [gh, "issue", "edit", str(issue_number), "-R", repo_nwo, "--remove-label", remove, "--add-label", add],
+            [gh, "issue", "edit", str(issue_number), "-R", repo_nwo, "--add-label", add],
             capture_output=True,
             text=True,
             check=True,
         )
-        logger.info("Transitioned labels: -%s +%s on issue #%d", remove, add, issue_number)
     except subprocess.CalledProcessError as exc:
-        logger.warning("Failed to transition labels on issue #%d: %s", issue_number, exc.stderr)
+        logger.warning("Failed to add label '%s' on issue #%d: %s", add, issue_number, exc.stderr)
+        return
+    try:
+        subprocess.run(  # noqa: S603
+            [gh, "issue", "edit", str(issue_number), "-R", repo_nwo, "--remove-label", remove],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        logger.warning("Failed to remove label '%s' on issue #%d: %s", remove, issue_number, exc.stderr)
+        return
+    logger.info("Transitioned labels: -%s +%s on issue #%d", remove, add, issue_number)
 
 
 def _find_option_id(options: list[dict], target_names: tuple[str, ...]) -> str | None:

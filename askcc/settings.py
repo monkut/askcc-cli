@@ -20,13 +20,9 @@ REVIEW_LABEL = "action:review"
 
 # Prepare transition
 PLANNING_STATUS_OPTIONS: tuple[str, ...] = ("planning",)
-PLANNER_FIELD_NAME = "Needs Action From"
-PLANNER_FIELD_VALUE = "PLANNER"
 
 # Project field transition
 REVIEW_STATUS_OPTIONS: tuple[str, ...] = ("in-internal-review", "in-review")
-REVIEWER_FIELD_NAME = "Needs Action From"
-REVIEWER_FIELD_VALUE = "REVIEWER"
 
 ASKCC_HOME: Path = Path(os.getenv("ASKCC_HOME") or str(Path.home() / ".askcc")).expanduser().resolve()
 TEMPLATES_DIR: Path = ASKCC_HOME / "templates"

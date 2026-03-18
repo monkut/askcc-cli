@@ -742,7 +742,7 @@ class TestTransitionProjectFields:
 
         assert "not in any project" in caplog.text
 
-    def test_updates_status_and_action_fields(self, caplog: pytest.LogCaptureFixture):
+    def test_updates_status_field(self, caplog: pytest.LogCaptureFixture):
         nodes = [
             {
                 "id": "item-1",
@@ -756,13 +756,6 @@ class TestTransitionProjectFields:
                             {"id": "opt-review", "name": "in-review"},
                         ],
                     },
-                    "actionField": {
-                        "id": "field-action",
-                        "options": [
-                            {"id": "opt-dev", "name": "DEVELOPER"},
-                            {"id": "opt-rev", "name": "REVIEWER"},
-                        ],
-                    },
                 },
             }
         ]
@@ -773,12 +766,11 @@ class TestTransitionProjectFields:
 
         with (
             caplog.at_level("INFO", logger="askcc.functions"),
-            patch("askcc.functions.subprocess.run", side_effect=[query_result, mutation_result, mutation_result]),
+            patch("askcc.functions.subprocess.run", side_effect=[query_result, mutation_result]),
         ):
             _transition_project_fields("/usr/bin/gh", "owner", "repo", 42)
 
         assert "Updated 'Status' in project 'My Board'" in caplog.text
-        assert "Updated 'Needs Action From' in project 'My Board'" in caplog.text
 
     def test_skips_missing_fields(self, caplog: pytest.LogCaptureFixture):
         nodes = [
@@ -788,7 +780,6 @@ class TestTransitionProjectFields:
                     "id": "proj-1",
                     "title": "Simple Board",
                     "statusField": None,
-                    "actionField": None,
                 },
             }
         ]
@@ -815,7 +806,6 @@ class TestTransitionProjectFields:
                         "id": "field-status",
                         "options": [{"id": "opt-todo", "name": "Todo"}, {"id": "opt-done", "name": "Done"}],
                     },
-                    "actionField": None,
                 },
             }
         ]
@@ -962,8 +952,6 @@ class TestTransitionIssueToPlanningIntegration:
             "askcc-cli",
             42,
             status_options=("planning",),
-            action_field_value="PLANNER",
-            action_field_name="Needs Action From",
         )
 
 

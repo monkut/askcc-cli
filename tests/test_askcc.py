@@ -2,14 +2,11 @@ from __future__ import annotations
 
 import json
 import subprocess
+from pathlib import Path
 from string import Template
-from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 from askcc.cli import _run_claude, main
 from askcc.definitions import AGENT_CONFIGS, AgentAction, AgentConfig, SupportedLanguage
@@ -261,9 +258,7 @@ class TestRunClaude:
             caplog.at_level("INFO", logger="askcc.cli"),
             patch("askcc.cli.subprocess.run", return_value=mock_result) as mock_run,
         ):
-            exit_code, usage = _run_claude(
-                "test prompt", config=agent_config, issue_url="https://github.com/test/repo/issues/1"
-            )
+            exit_code, usage = _run_claude("test prompt", config=agent_config, issue_id="test/repo#1", cwd=Path.cwd())
 
         assert exit_code == 0
         assert usage == {"input_tokens": 1500, "output_tokens": 300, "model": "claude-sonnet-4-6-20250514"}
@@ -280,9 +275,7 @@ class TestRunClaude:
         mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="not json", stderr="")
 
         with patch("askcc.cli.subprocess.run", return_value=mock_result):
-            exit_code, usage = _run_claude(
-                "test prompt", config=agent_config, issue_url="https://github.com/test/repo/issues/1"
-            )
+            exit_code, usage = _run_claude("test prompt", config=agent_config, issue_id="test/repo#1", cwd=Path.cwd())
 
         assert exit_code == 0
         assert usage is None
@@ -294,9 +287,7 @@ class TestRunClaude:
         mock_result = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="error occurred")
 
         with patch("askcc.cli.subprocess.run", return_value=mock_result):
-            exit_code, usage = _run_claude(
-                "test prompt", config=agent_config, issue_url="https://github.com/test/repo/issues/1"
-            )
+            exit_code, usage = _run_claude("test prompt", config=agent_config, issue_id="test/repo#1", cwd=Path.cwd())
 
         assert exit_code == 1
         assert usage is None
@@ -306,9 +297,7 @@ class TestRunClaude:
         mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=claude_response, stderr="")
 
         with patch("askcc.cli.subprocess.run", return_value=mock_result):
-            exit_code, usage = _run_claude(
-                "test prompt", config=agent_config, issue_url="https://github.com/test/repo/issues/1"
-            )
+            exit_code, usage = _run_claude("test prompt", config=agent_config, issue_id="test/repo#1", cwd=Path.cwd())
 
         assert exit_code == 0
         assert usage is None

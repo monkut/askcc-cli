@@ -43,6 +43,15 @@ def _parse_issue_url(github_issue_url: str) -> tuple[str, str, int]:
     return owner, repo, issue_number
 
 
+def short_issue_id(issue_url: str) -> str:
+    """Return a truncated issue identifier like 'owner/repo#42'."""
+    try:
+        owner, repo, number = _parse_issue_url(issue_url)
+    except (ValueError, IndexError):
+        return issue_url
+    return f"{owner}/{repo}#{number}"
+
+
 def _require_gh_cli() -> str:
     """Return the path to the gh CLI, raising if not found."""
     gh_path = shutil.which("gh")

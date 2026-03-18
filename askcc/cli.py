@@ -51,7 +51,7 @@ def _run_claude(prompt: str, config: AgentConfig, *, issue_url: str, cwd: Path) 
 
     logger.info("[%s] Requesting '%s' from Claude Code ...", issue_url, config.action_name)
     logger.info("[%s] Working directory: %s", issue_url, cwd)
-    logger.debug("[%s] Command: %s ...", issue_url, " ".join(cmd[:4]))
+    logger.debug("[%s] Command: %s", issue_url, " ".join(arg for arg in cmd if arg != prompt))
     result = subprocess.run(  # noqa: S603
         cmd,
         text=True,

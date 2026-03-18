@@ -30,7 +30,7 @@ DEFAULT_PERMISSION_MODE = "acceptEdits"
 DEBUG_OUTPUT_MAX_CHARS = 2000
 
 
-def _run_claude(prompt: str, config: AgentConfig, *, issue_id: str, cwd: Path) -> tuple[int, dict | None]:
+def _run_claude(prompt: str, config: AgentConfig, *, issue_url: str, cwd: Path) -> tuple[int, dict | None]:
     """Run claude CLI with the given prompt, capturing JSON output for token usage reporting."""
     agent_definition = {config.action_name: {"description": config.description, "prompt": config.system_prompt}}
 
@@ -49,9 +49,9 @@ def _run_claude(prompt: str, config: AgentConfig, *, issue_id: str, cwd: Path) -
     # Remove CLAUDECODE env var so the child claude process doesn't think it's nested inside Claude Code
     env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
 
-    logger.info("[%s] Requesting '%s' from Claude Code ...", issue_id, config.action_name)
-    logger.info("[%s] Working directory: %s", issue_id, cwd)
-    logger.debug("[%s] Command: %s ...", issue_id, " ".join(cmd[:4]))
+    logger.info("[%s] Requesting '%s' from Claude Code ...", issue_url, config.action_name)
+    logger.info("[%s] Working directory: %s", issue_url, cwd)
+    logger.debug("[%s] Command: %s ...", issue_url, " ".join(cmd[:4]))
     result = subprocess.run(  # noqa: S603
         cmd,
         text=True,
@@ -60,11 +60,11 @@ def _run_claude(prompt: str, config: AgentConfig, *, issue_id: str, cwd: Path) -
         cwd=cwd,
         env=env,
     )
-    logger.info("[%s] Claude Code finished (exit code: %d)", issue_id, result.returncode)
+    logger.info("[%s] Claude Code finished (exit code: %d)", issue_url, result.returncode)
 
     usage = None
     if result.stdout:
-        logger.debug("[%s] Claude Code raw output: %s", issue_id, result.stdout[:DEBUG_OUTPUT_MAX_CHARS])
+        logger.debug("[%s] Claude Code raw output: %s", issue_url, result.stdout[:DEBUG_OUTPUT_MAX_CHARS])
         try:
             data = json.loads(result.stdout)
             response_text = data.get("result", "")
@@ -77,23 +77,23 @@ def _run_claude(prompt: str, config: AgentConfig, *, issue_id: str, cwd: Path) -
                     usage["model"] = model
                 logger.info(
                     "[%s] Token usage — model: %s, input: %s, output: %s",
-                    issue_id,
+                    issue_url,
                     usage.get("model", "N/A"),
                     usage.get("input_tokens", "N/A"),
                     usage.get("output_tokens", "N/A"),
                 )
         except json.JSONDecodeError:
-            logger.warning("[%s] Failed to parse Claude JSON output", issue_id)
+            logger.warning("[%s] Failed to parse Claude JSON output", issue_url)
             print(result.stdout)  # noqa: T201
 
     if result.stderr:
         log_level = logging.ERROR if result.returncode != 0 else logging.DEBUG
-        logger.log(log_level, "[%s] Claude Code stderr:\n%s", issue_id, result.stderr)
+        logger.log(log_level, "[%s] Claude Code stderr:\n%s", issue_url, result.stderr)
 
     return result.returncode, usage
 
 
-def _build_prompt(action: AgentAction, config: AgentConfig, issue_content: str, issue_url: str, issue_id: str) -> str:
+def _build_prompt(action: AgentAction, config: AgentConfig, issue_content: str, issue_url: str) -> str:
     """Build the user prompt, fetching PR content for reviewpr commands."""
     if action == AgentAction.REVIEWPR:
         pr_content = fetch_pr_content(issue_url)
@@ -102,7 +102,7 @@ def _build_prompt(action: AgentAction, config: AgentConfig, issue_content: str, 
         )
     else:
         prompt = Template(config.user_prompt_template).safe_substitute(issue_content=issue_content)
-    logger.info("[%s] Prompt length: %d chars", issue_id, len(prompt))
+    logger.info("[%s] Prompt length: %d chars", issue_url, len(prompt))
     return prompt
 
 
@@ -218,21 +218,21 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
             logger.error("Issue readiness validation failed. Use --skip-validation to bypass.")
             sys.exit(1)
 
-    issue_id = args.github_issue_url
+    issue_url = args.github_issue_url
     cwd = (args.cwd or Path.cwd()).resolve()
     config = load_agent_config(action)
-    issue_content = fetch_github_issue(args.github_issue_url)
+    issue_content = fetch_github_issue(issue_url)
     try:
-        prompt = _build_prompt(action, config, issue_content, args.github_issue_url, issue_id)
+        prompt = _build_prompt(action, config, issue_content, issue_url)
     except ValueError:
-        logger.exception("[%s] Failed to build prompt for '%s'", issue_id, action.value)
+        logger.exception("[%s] Failed to build prompt for '%s'", issue_url, action.value)
         sys.exit(1)
     if args.language != SupportedLanguage.ENGLISH:
         prompt += f"\nOutput all comments in {args.language}."
-    return_code, usage = _run_claude(prompt, config=config, issue_id=issue_id, cwd=cwd)
+    return_code, usage = _run_claude(prompt, config=config, issue_url=issue_url, cwd=cwd)
 
     if usage:
-        append_usage_to_last_comment(args.github_issue_url, usage)
+        append_usage_to_last_comment(issue_url, usage)
 
     if action == AgentAction.DEVELOP:
         # Post-develop: check if any changes were produced
@@ -244,9 +244,9 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
             cwd=cwd,
         )
         if git_result.returncode != 0:
-            logger.warning("[%s] git status failed: %s", issue_id, git_result.stderr.strip())
+            logger.warning("[%s] git status failed: %s", issue_url, git_result.stderr.strip())
         else:
-            logger.info("[%s] Post-develop git status: %s", issue_id, git_result.stdout.strip() or "(clean)")
+            logger.info("[%s] Post-develop git status: %s", issue_url, git_result.stdout.strip() or "(clean)")
         # Check for worktree branches left behind
         wt_result = subprocess.run(  # noqa: S603
             ["git", "worktree", "list", "--porcelain"],  # noqa: S607
@@ -256,15 +256,15 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
             cwd=cwd,
         )
         if wt_result.returncode != 0:
-            logger.warning("[%s] git worktree list failed: %s", issue_id, wt_result.stderr.strip())
+            logger.warning("[%s] git worktree list failed: %s", issue_url, wt_result.stderr.strip())
         elif wt_result.stdout.strip():
-            logger.debug("[%s] Git worktrees:\n%s", issue_id, wt_result.stdout.strip())
+            logger.debug("[%s] Git worktrees:\n%s", issue_url, wt_result.stdout.strip())
 
     if action == AgentAction.PREPARE and return_code == 0:
-        transition_issue_to_planning(args.github_issue_url)
+        transition_issue_to_planning(issue_url)
 
     if action == AgentAction.DEVELOP and return_code == 0:
-        transition_issue_to_review(args.github_issue_url)
+        transition_issue_to_review(issue_url)
 
     sys.exit(return_code)
 

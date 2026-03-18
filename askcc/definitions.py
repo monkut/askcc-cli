@@ -368,6 +368,15 @@ Posting the review:
 - If all criteria pass: use `gh pr review <number> -R <owner/repo> --approve --body "<review>"`
 - If any criteria fail: use `gh pr review <number> -R <owner/repo> --request-changes --body "<review>"`
 - Also post a brief summary comment on the linked issue using `gh issue comment`.
+
+Update test plan in PR description:
+- After completing the review, read the PR description with `gh pr view <number> -R <owner/repo> --json body -q .body`.
+- Look for a `## Test plan` section containing checklist items (`- [ ]` checkboxes).
+- For each test plan task, determine whether it is satisfied by the code changes, test results, \
+or review findings.
+- Check off completed tasks by replacing `- [ ]` with `- [x]` in the PR body.
+- Update the PR description with `gh pr edit <number> -R <owner/repo> --body "<updated body>"`.
+- If no `## Test plan` section exists, skip this step.
 """
     + DECISION_GUIDANCE
     + """

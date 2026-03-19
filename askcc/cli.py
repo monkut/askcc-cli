@@ -94,7 +94,7 @@ def _run_claude(prompt: str, config: AgentConfig, *, issue_url: str, cwd: Path) 
 
 
 def _build_prompt(action: AgentAction, config: AgentConfig, issue_content: str, issue_url: str) -> str:
-    """Build the user prompt, fetching PR content for reviewpr commands."""
+    """Build the user prompt, fetching PR content for pr-review commands."""
     if action == AgentAction.REVIEWPR:
         pr_content = fetch_pr_content(issue_url)
         prompt = Template(config.user_prompt_template).safe_substitute(
@@ -172,7 +172,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
     )
     review_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL to review.")
 
-    reviewpr_parser = subparsers.add_parser("reviewpr", help="Review a PR's code against its linked issue.")
+    reviewpr_parser = subparsers.add_parser("pr-review", help="Review a PR's code against its linked issue.")
     reviewpr_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL with linked PR.")
 
     explore_parser = subparsers.add_parser(

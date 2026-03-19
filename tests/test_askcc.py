@@ -1163,7 +1163,7 @@ class TestLoadReviewprConfig:
         bootstrap_templates()
 
         config = load_agent_config(AgentAction.REVIEWPR)
-        assert config.action_name == "reviewpr"
+        assert config.action_name == "pr-review"
         assert config.description == "Reviews a pull request against its linked issue's Definition of Done"
         assert config.required_variables == ("issue_content", "pr_content")
 
@@ -1178,7 +1178,7 @@ class TestReviewprCommand:
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
             patch("askcc.cli.fetch_pr_content", return_value="pr diff content") as mock_pr,
             patch("askcc.cli._run_claude", return_value=(0, None)) as mock_claude,
-            patch("sys.argv", ["askcc", "reviewpr", "-g", self.ISSUE_URL]),
+            patch("sys.argv", ["askcc", "pr-review", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
         ):
             main()
@@ -1195,7 +1195,7 @@ class TestReviewprCommand:
             patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
             patch("askcc.cli.fetch_pr_content", side_effect=ValueError("No linked pull request found")),
-            patch("sys.argv", ["askcc", "reviewpr", "-g", self.ISSUE_URL]),
+            patch("sys.argv", ["askcc", "pr-review", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit, match="1"),
         ):
             main()
@@ -1211,7 +1211,7 @@ class TestReviewprCommand:
             patch("askcc.cli._run_claude", return_value=(0, None)),
             patch("askcc.cli.transition_issue_to_review") as mock_review,
             patch("askcc.cli.transition_issue_to_planning") as mock_planning,
-            patch("sys.argv", ["askcc", "reviewpr", "-g", self.ISSUE_URL]),
+            patch("sys.argv", ["askcc", "pr-review", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
         ):
             main()

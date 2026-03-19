@@ -433,7 +433,7 @@ class AgentAction(StrEnum):
     PLAN = "plan"
     DEVELOP = "develop"
     REVIEW = "issue-review"
-    REVIEWPR = "reviewpr"
+    REVIEWPR = "pr-review"
     EXPLORE = "explore"
     DIAGNOSE = "diagnose"
 
@@ -476,7 +476,7 @@ AGENT_CONFIGS: dict[AgentAction, AgentConfig] = {
         required_variables=("issue_content",),
     ),
     AgentAction.REVIEWPR: AgentConfig(
-        action_name="reviewpr",
+        action_name="pr-review",
         description="Reviews a pull request against its linked issue's Definition of Done",
         system_prompt=REVIEWPR_AGENT_PROMPT,
         user_prompt_template=REVIEWPR_USER_PROMPT_TEMPLATE,

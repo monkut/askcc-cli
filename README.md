@@ -30,7 +30,7 @@ uvx --from . --python 3.14 askcc --help
 ## Usage
 
 ```
-askcc [--cwd DIR] {prepare,plan,validate,develop,issue-review,reviewpr,explore,diagnose} --github-issue-url URL
+askcc [--cwd DIR] {prepare,plan,validate,develop,issue-review,pr-review,explore,diagnose} --github-issue-url URL
 askcc install [--directory DIR]
 ```
 
@@ -43,7 +43,7 @@ askcc install [--directory DIR]
 | `validate` | Check issue readiness for development (acceptance criteria, dependencies, assignee, blocking labels) |
 | `develop`  | Fetch the issue and run Claude in development mode (implementation)      |
 | `issue-review` | Review issue quality (clarity, completeness, feasibility)            |
-| `reviewpr` | Fetch the issue and linked PR, review code against Definition of Done    |
+| `pr-review` | Review a PR's code against its linked issue's Definition of Done        |
 | `explore`  | Fetch the issue and run Claude in explore mode (investigate and propose solutions) |
 | `diagnose` | Fetch the issue and run Claude in diagnose mode (root cause analysis)    |
 | `install`  | Install bundled skills to `~/.claude/skills` and/or `~/.openclaw/workspace/skills` |

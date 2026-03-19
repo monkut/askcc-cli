@@ -183,7 +183,7 @@ class TestLoadAgentConfig:
         bootstrap_templates()
 
         config = load_agent_config(AgentAction.REVIEW)
-        assert config.action_name == "review"
+        assert config.action_name == "issue-review"
         assert config.description == "Reviews a GitHub issue for clarity, completeness, and feasibility"
 
     def test_load_explore_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

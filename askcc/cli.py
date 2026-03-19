@@ -167,7 +167,9 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
         "--skip-validation", action="store_true", default=False, help="Skip readiness validation before development."
     )
 
-    review_parser = subparsers.add_parser("review", help="Run Claude in review mode (issue quality review).")
+    review_parser = subparsers.add_parser(
+        "issue-review", help="Review issue quality (clarity, completeness, feasibility)."
+    )
     review_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL to review.")
 
     reviewpr_parser = subparsers.add_parser("reviewpr", help="Review a PR's code against its linked issue.")

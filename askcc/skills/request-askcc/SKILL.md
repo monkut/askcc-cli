@@ -1,6 +1,6 @@
 ---
 name: request-askcc
-description: Request PREPARE, VALIDATE, REVIEW, REVIEWPR, PLAN, DEVELOP, EXPLORE or DIAGNOSE actions for GitHub issues via the askcc CLI. Use when a user asks to prepare, validate, review, plan, develop, explore, diagnose, or review a PR for a GitHub issue.
+description: Request PREPARE, VALIDATE, ISSUE-REVIEW, PR-REVIEW, PLAN, DEVELOP, EXPLORE or DIAGNOSE actions for GitHub issues via the askcc CLI. Use when a user asks to prepare, validate, review an issue, plan, develop, explore, diagnose, or review a PR for a GitHub issue.
 ---
 
 # Request GitHub Issue Action
@@ -13,10 +13,10 @@ Use the `askcc` tool to request processing of GitHub issues defined by a URL.
 - When a user asks to VALIDATE an issue's readiness for development, use `askcc validate`.
 - When a user asks to PLAN an implementation of a prepared GitHub issue (produce step-by-step implementation tasks against the codebase), use `askcc plan`.
 - When a user asks to DEVELOP a planned implementation defined in a given GitHub issue, use `askcc develop`.
-- When a user asks to REVIEW a github issue, use `askcc review`.
+- When a user asks to REVIEW a github issue, use `askcc issue-review`.
 - When a user asks to EXPLORE a github issue (investigate and propose solutions), use `askcc explore`.
 - When a user asks to DIAGNOSE a github issue (root cause analysis), use `askcc diagnose`.
-- When a user asks to REVIEW a PR (code review of a pull request linked to an issue), use `askcc reviewpr`.
+- When a user asks to REVIEW a PR (code review of a pull request linked to an issue), use `askcc pr-review`.
 
 ## Examples
 
@@ -49,11 +49,11 @@ Use the `askcc` tool to request processing of GitHub issues defined by a URL.
 
   ```
 
-- "Review https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1"
+- "Review issue https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1"
 
   ```bash
-  # This fetches the specified GitHub issue and runs Claude in review mode to assess issue quality and completeness. 
-  askcc review --github-issue-url  https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1                                           
+  # This fetches the specified GitHub issue and reviews it for clarity, completeness, and feasibility.
+  askcc issue-review --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
   ```
 
 - "Explore https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1"
@@ -74,7 +74,7 @@ Use the `askcc` tool to request processing of GitHub issues defined by a URL.
 
   ```bash
   # This fetches the issue and its linked PR, reviews the code against Definition of Done criteria, and posts a structured review on the PR.
-  askcc reviewpr --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
+  askcc pr-review --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
   ```
 
 WARNING: If the `{TARGET DEVELOPMENT REPOSITORY}` cannot be determined, ASK user in Slack.

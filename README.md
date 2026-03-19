@@ -30,7 +30,7 @@ uvx --from . --python 3.14 askcc --help
 ## Usage
 
 ```
-askcc [--cwd DIR] {prepare,plan,validate,develop,review,reviewpr,explore,diagnose} --github-issue-url URL
+askcc [--cwd DIR] {prepare,plan,validate,develop,issue-review,pr-review,explore,diagnose} --github-issue-url URL
 askcc install [--directory DIR]
 ```
 
@@ -42,8 +42,8 @@ askcc install [--directory DIR]
 | `plan`     | Fetch the issue and run Claude in planning mode (architecture/design)    |
 | `validate` | Check issue readiness for development (acceptance criteria, dependencies, assignee, blocking labels) |
 | `develop`  | Fetch the issue and run Claude in development mode (implementation)      |
-| `review`   | Fetch the issue and run Claude in review mode (issue quality review)     |
-| `reviewpr` | Fetch the issue and linked PR, review code against Definition of Done    |
+| `issue-review` | Review issue quality (clarity, completeness, feasibility)            |
+| `pr-review` | Review a PR's code against its linked issue's Definition of Done        |
 | `explore`  | Fetch the issue and run Claude in explore mode (investigate and propose solutions) |
 | `diagnose` | Fetch the issue and run Claude in diagnose mode (root cause analysis)    |
 | `install`  | Install bundled skills to `~/.claude/skills` and/or `~/.openclaw/workspace/skills` |
@@ -79,8 +79,8 @@ On first run, askcc creates `~/.askcc/templates/` with default template files:
 | `PLAN_USER_PROMPT.md`        | `$issue_content`   | User prompt template for planning      |
 | `DEVELOP_SYSTEM_PROMPT.md`   | —                  | System prompt for the dev agent        |
 | `DEVELOP_USER_PROMPT.md`     | `$issue_content`   | User prompt template for development   |
-| `REVIEW_SYSTEM_PROMPT.md`    | —                  | System prompt for the review agent     |
-| `REVIEW_USER_PROMPT.md`      | `$issue_content`   | User prompt template for review        |
+| `REVIEW_SYSTEM_PROMPT.md`    | —                  | System prompt for the issue-review agent |
+| `REVIEW_USER_PROMPT.md`      | `$issue_content`   | User prompt template for issue-review    |
 | `EXPLORE_SYSTEM_PROMPT.md`   | —                  | System prompt for the explore agent    |
 | `EXPLORE_USER_PROMPT.md`     | `$issue_content`   | User prompt template for exploration   |
 | `DIAGNOSE_SYSTEM_PROMPT.md`  | —                  | System prompt for the diagnose agent   |
@@ -107,7 +107,7 @@ askcc plan --github-issue-url https://github.com/monkut/askcc-cli/issues/1
 Review an issue for quality and completeness:
 
 ```bash
-askcc review --github-issue-url https://github.com/monkut/askcc-cli/issues/1
+askcc issue-review --github-issue-url https://github.com/monkut/askcc-cli/issues/1
 ```
 
 Validate an issue is ready for development:

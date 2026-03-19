@@ -432,8 +432,8 @@ class AgentAction(StrEnum):
     PREPARE = "prepare"
     PLAN = "plan"
     DEVELOP = "develop"
-    REVIEW = "review"
-    REVIEWPR = "reviewpr"
+    REVIEW = "issue-review"
+    REVIEWPR = "pr-review"
     EXPLORE = "explore"
     DIAGNOSE = "diagnose"
 
@@ -467,7 +467,7 @@ AGENT_CONFIGS: dict[AgentAction, AgentConfig] = {
         required_variables=("issue_content",),
     ),
     AgentAction.REVIEW: AgentConfig(
-        action_name="review",
+        action_name="issue-review",
         description="Reviews a GitHub issue for clarity, completeness, and feasibility",
         system_prompt=REVIEW_AGENT_PROMPT,
         user_prompt_template=REVIEW_USER_PROMPT_TEMPLATE,
@@ -476,7 +476,7 @@ AGENT_CONFIGS: dict[AgentAction, AgentConfig] = {
         required_variables=("issue_content",),
     ),
     AgentAction.REVIEWPR: AgentConfig(
-        action_name="reviewpr",
+        action_name="pr-review",
         description="Reviews a pull request against its linked issue's Definition of Done",
         system_prompt=REVIEWPR_AGENT_PROMPT,
         user_prompt_template=REVIEWPR_USER_PROMPT_TEMPLATE,

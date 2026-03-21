@@ -11,6 +11,7 @@ from . import __version__
 from .definitions import AgentAction, AgentConfig, SupportedLanguage
 from .functions import (
     CheckResult,
+    _parse_issue_url,
     append_usage_to_last_comment,
     bootstrap_templates,
     fetch_github_issue,
@@ -21,6 +22,7 @@ from .functions import (
     transition_issue_to_review,
     validate_issue_labels,
     validate_issue_readiness,
+    write_prompt_content,
 )
 from .settings import configure_logging
 
@@ -30,8 +32,13 @@ DEFAULT_PERMISSION_MODE = "acceptEdits"
 DEBUG_OUTPUT_MAX_CHARS = 2000
 
 
-def _run_claude(prompt: str, config: AgentConfig, *, issue_url: str, cwd: Path) -> tuple[int, dict | None]:
-    """Run claude CLI with the given prompt, capturing JSON output for token usage reporting."""
+def _run_claude(
+    prompt: str, config: AgentConfig, *, issue_url: str, cwd: Path, prompt_files: list[Path] | None = None
+) -> tuple[int, dict | None]:
+    """Run claude CLI with the given prompt, capturing JSON output for token usage reporting.
+
+    Any prompt_files are cleaned up after execution.
+    """
     agent_definition = {config.action_name: {"description": config.description, "prompt": config.system_prompt}}
 
     cmd = [
@@ -52,14 +59,22 @@ def _run_claude(prompt: str, config: AgentConfig, *, issue_url: str, cwd: Path) 
     logger.info("[%s] Requesting '%s' from Claude Code ...", issue_url, config.action_name)
     logger.info("[%s] Working directory: %s", issue_url, cwd)
     logger.debug("[%s] Command: %s", issue_url, " ".join("<prompt>" if arg is prompt else arg for arg in cmd))
-    result = subprocess.run(  # noqa: S603
-        cmd,
-        text=True,
-        check=False,
-        capture_output=True,
-        cwd=cwd,
-        env=env,
-    )
+    try:
+        result = subprocess.run(  # noqa: S603
+            cmd,
+            text=True,
+            check=False,
+            capture_output=True,
+            cwd=cwd,
+            env=env,
+        )
+    finally:
+        for f in prompt_files or []:
+            try:
+                f.unlink(missing_ok=True)
+                logger.debug("Cleaned up prompt file: %s", f)
+            except OSError:
+                logger.warning("Failed to clean up prompt file: %s", f)
     logger.info("[%s] Claude Code finished (exit code: %d)", issue_url, result.returncode)
 
     usage = None
@@ -93,17 +108,28 @@ def _run_claude(prompt: str, config: AgentConfig, *, issue_url: str, cwd: Path) 
     return result.returncode, usage
 
 
-def _build_prompt(action: AgentAction, config: AgentConfig, issue_content: str, issue_url: str) -> str:
-    """Build the user prompt, fetching PR content for pr-review commands."""
+def _build_prompt(
+    action: AgentAction, config: AgentConfig, issue_content: str, issue_url: str
+) -> tuple[str, list[Path]]:
+    """Build the user prompt, writing variable content to tempfiles.
+
+    Returns (prompt_text, list_of_tempfile_paths).
+    """
+    owner, repo, issue_number = _parse_issue_url(issue_url)
+    issue_file = write_prompt_content(action.value, owner, repo, issue_number, issue_content)
+    prompt_files = [issue_file]
+
     if action == AgentAction.REVIEWPR:
         pr_content = fetch_pr_content(issue_url)
+        pr_file = write_prompt_content(action.value, owner, repo, issue_number, pr_content, suffix="_pr")
+        prompt_files.append(pr_file)
         prompt = Template(config.user_prompt_template).safe_substitute(
-            issue_content=issue_content, pr_content=pr_content
+            issue_content_file=str(issue_file), pr_content_file=str(pr_file)
         )
     else:
-        prompt = Template(config.user_prompt_template).safe_substitute(issue_content=issue_content)
+        prompt = Template(config.user_prompt_template).safe_substitute(issue_content_file=str(issue_file))
     logger.info("[%s] Prompt length: %d chars", issue_url, len(prompt))
-    return prompt
+    return prompt, prompt_files
 
 
 def _print_validation_report(issue_url: str, checks: list[CheckResult]) -> None:
@@ -225,13 +251,13 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
     config = load_agent_config(action)
     issue_content = fetch_github_issue(issue_url)
     try:
-        prompt = _build_prompt(action, config, issue_content, issue_url)
+        prompt, prompt_files = _build_prompt(action, config, issue_content, issue_url)
     except ValueError:
         logger.exception("[%s] Failed to build prompt for '%s'", issue_url, action.value)
         sys.exit(1)
     if args.language != SupportedLanguage.ENGLISH:
         prompt += f"\nOutput all comments in {args.language}."
-    return_code, usage = _run_claude(prompt, config=config, issue_url=issue_url, cwd=cwd)
+    return_code, usage = _run_claude(prompt, config=config, issue_url=issue_url, cwd=cwd, prompt_files=prompt_files)
 
     if usage:
         append_usage_to_last_comment(issue_url, usage)

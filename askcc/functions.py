@@ -3,6 +3,7 @@ import logging
 import re
 import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass, replace
 from importlib.resources import files as package_files
 from pathlib import Path
@@ -658,6 +659,20 @@ def transition_issue_to_review(github_issue_url: str) -> None:
 
     _swap_issue_labels(gh, repo_nwo, issue_number, remove=DEVELOP_LABEL, add=REVIEW_LABEL)
     _transition_project_fields(gh, owner, repo, issue_number)
+
+
+def write_prompt_content(
+    command: str, owner: str, repo: str, issue_number: int, content: str, *, suffix: str = ""
+) -> Path:
+    """Write variable prompt content to a named tempfile in /tmp.
+
+    Returns the path to the written file.
+    """
+    filename = f"askcc_{command}_{owner}-{repo}_{issue_number}{suffix}.md"
+    filepath = Path(tempfile.gettempdir()) / filename
+    filepath.write_text(content)
+    logger.info("Wrote prompt content to %s (%d chars)", filepath, len(content))
+    return filepath
 
 
 def load_agent_config(agent: AgentAction) -> AgentConfig:

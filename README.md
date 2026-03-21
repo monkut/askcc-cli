@@ -74,19 +74,21 @@ On first run, askcc creates `~/.askcc/templates/` with default template files:
 | File                       | Required variables | Description                          |
 |----------------------------|--------------------|--------------------------------------|
 | `PREPARE_SYSTEM_PROMPT.md`   | —                  | System prompt for the prepare agent    |
-| `PREPARE_USER_PROMPT.md`     | `$issue_content`   | User prompt template for preparation   |
+| `PREPARE_USER_PROMPT.md`     | `$issue_content_file`   | User prompt template for preparation   |
 | `PLAN_SYSTEM_PROMPT.md`      | —                  | System prompt for the planning agent   |
-| `PLAN_USER_PROMPT.md`        | `$issue_content`   | User prompt template for planning      |
+| `PLAN_USER_PROMPT.md`        | `$issue_content_file`   | User prompt template for planning      |
 | `DEVELOP_SYSTEM_PROMPT.md`   | —                  | System prompt for the dev agent        |
-| `DEVELOP_USER_PROMPT.md`     | `$issue_content`   | User prompt template for development   |
+| `DEVELOP_USER_PROMPT.md`     | `$issue_content_file`   | User prompt template for development   |
 | `REVIEW_SYSTEM_PROMPT.md`    | —                  | System prompt for the issue-review agent |
-| `REVIEW_USER_PROMPT.md`      | `$issue_content`   | User prompt template for issue-review    |
+| `REVIEW_USER_PROMPT.md`      | `$issue_content_file`   | User prompt template for issue-review    |
+| `REVIEWPR_SYSTEM_PROMPT.md`  | —                  | System prompt for the pr-review agent  |
+| `REVIEWPR_USER_PROMPT.md`    | `$issue_content_file`, `$pr_content_file` | User prompt template for PR review |
 | `EXPLORE_SYSTEM_PROMPT.md`   | —                  | System prompt for the explore agent    |
-| `EXPLORE_USER_PROMPT.md`     | `$issue_content`   | User prompt template for exploration   |
+| `EXPLORE_USER_PROMPT.md`     | `$issue_content_file`   | User prompt template for exploration   |
 | `DIAGNOSE_SYSTEM_PROMPT.md`  | —                  | System prompt for the diagnose agent   |
-| `DIAGNOSE_USER_PROMPT.md`    | `$issue_content`   | User prompt template for diagnosis     |
+| `DIAGNOSE_USER_PROMPT.md`    | `$issue_content_file`   | User prompt template for diagnosis     |
 
-Edit any file to customize the agent's behavior. User prompt templates **must** contain the `$issue_content` variable, which is replaced with the fetched GitHub issue at runtime. askcc validates this on startup and raises an error if a required variable is missing.
+Edit any file to customize the agent's behavior. User prompt templates **must** contain the `$issue_content_file` variable, which is replaced with the path to a tempfile containing the fetched GitHub issue content at runtime. The tempfile is written to `/tmp` with the naming convention `askcc_{COMMAND}_{OWNER}-{REPO}_{ISSUE#}.md` and is automatically cleaned up after execution. askcc validates required variables on startup and raises an error if one is missing.
 
 Override the config directory by setting the `ASKCC_HOME` environment variable (e.g. for testing).
 

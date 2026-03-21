@@ -29,6 +29,7 @@ from askcc.functions import (
     transition_issue_to_review,
     validate_issue_readiness,
     validate_template,
+    write_prompt_content,
 )
 
 
@@ -144,11 +145,11 @@ class TestLoadTemplate:
 
 class TestValidateTemplate:
     def test_valid_template_passes(self):
-        validate_template("Hello $issue_content", ("issue_content",), "test.md")
+        validate_template("Hello $issue_content_file", ("issue_content_file",), "test.md")
 
     def test_missing_variable_raises(self):
-        with pytest.raises(ValueError, match=r"missing required variable '\$issue_content'"):
-            validate_template("Hello world, no variable here", ("issue_content",), "test.md")
+        with pytest.raises(ValueError, match=r"missing required variable '\$issue_content_file'"):
+            validate_template("Hello world, no variable here", ("issue_content_file",), "test.md")
 
     def test_no_required_variables_always_passes(self):
         validate_template("Anything goes", (), "test.md")
@@ -209,25 +210,60 @@ class TestLoadAgentConfig:
         monkeypatch.setattr("askcc.functions.TEMPLATES_DIR", templates_dir)
         bootstrap_templates()
 
-        # Overwrite user prompt with text that omits $issue_content
+        # Overwrite user prompt with text that omits $issue_content_file
         (templates_dir / "PLAN_USER_PROMPT.md").write_text("No variable here")
 
         with pytest.raises(ValueError, match="missing required variable"):
             load_agent_config(AgentAction.PLAN)
 
 
-class TestStringTemplateSubstitution:
-    def test_issue_content_substituted(self):
-        template_str = "Do the thing.\n\n$issue_content"
-        result = Template(template_str).safe_substitute(issue_content="Fix bug #42")
-        assert result == "Do the thing.\n\nFix bug #42"
+class TestWritePromptContent:
+    def test_writes_file_with_correct_name(self):
+        filepath = write_prompt_content("plan", "monkut", "askcc-cli", 42, "issue content here")
+        try:
+            assert filepath.name == "askcc_plan_monkut-askcc-cli_42.md"
+            assert filepath.read_text() == "issue content here"
+        finally:
+            filepath.unlink(missing_ok=True)
 
-    def test_json_curly_braces_survive(self):
-        template_str = "Process this:\n\n$issue_content"
-        issue = '{"json": true, "nested": {"key": "value"}}'
-        result = Template(template_str).safe_substitute(issue_content=issue)
-        assert '{"json": true' in result
-        assert "$issue_content" not in result
+    def test_writes_file_with_suffix(self):
+        filepath = write_prompt_content("pr-review", "owner", "repo", 7, "pr diff", suffix="_pr")
+        try:
+            assert filepath.name == "askcc_pr-review_owner-repo_7_pr.md"
+            assert filepath.read_text() == "pr diff"
+        finally:
+            filepath.unlink(missing_ok=True)
+
+    def test_overwrites_existing_file(self):
+        filepath = write_prompt_content("plan", "owner", "repo", 1, "first")
+        try:
+            assert filepath.read_text() == "first"
+            filepath2 = write_prompt_content("plan", "owner", "repo", 1, "second")
+            assert filepath == filepath2
+            assert filepath.read_text() == "second"
+        finally:
+            filepath.unlink(missing_ok=True)
+
+
+class TestStringTemplateSubstitution:
+    def test_issue_content_file_substituted(self):
+        template_str = "Do the thing.\n\nRead the issue content from: $issue_content_file"
+        filepath = write_prompt_content("plan", "owner", "repo", 42, "content")
+        try:
+            result = Template(template_str).safe_substitute(issue_content_file=str(filepath))
+            assert str(filepath) in result
+        finally:
+            filepath.unlink(missing_ok=True)
+
+    def test_file_path_substitution(self):
+        template_str = "Process this:\n\nRead the issue content from: $issue_content_file"
+        filepath = write_prompt_content("plan", "owner", "repo", 42, "content")
+        try:
+            result = Template(template_str).safe_substitute(issue_content_file=str(filepath))
+            assert str(filepath) in result
+            assert "$issue_content_file" not in result
+        finally:
+            filepath.unlink(missing_ok=True)
 
 
 class TestRunClaude:
@@ -1165,7 +1201,7 @@ class TestLoadReviewprConfig:
         config = load_agent_config(AgentAction.REVIEWPR)
         assert config.action_name == "pr-review"
         assert config.description == "Reviews a pull request against its linked issue's Definition of Done"
-        assert config.required_variables == ("issue_content", "pr_content")
+        assert config.required_variables == ("issue_content_file", "pr_content_file")
 
 
 class TestReviewprCommand:
@@ -1185,8 +1221,8 @@ class TestReviewprCommand:
 
         mock_pr.assert_called_once_with(self.ISSUE_URL)
         prompt = mock_claude.call_args[0][0]
-        assert "issue body" in prompt
-        assert "pr diff content" in prompt
+        assert "askcc_pr-review_monkut-askcc-cli_1.md" in prompt
+        assert "askcc_pr-review_monkut-askcc-cli_1_pr.md" in prompt
 
     def test_reviewpr_exits_on_no_linked_pr(self, caplog: pytest.LogCaptureFixture):
         with (

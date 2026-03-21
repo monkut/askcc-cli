@@ -103,7 +103,7 @@ PREPARE_USER_PROMPT_TEMPLATE = (
     " Assess completeness, suggest acceptance criteria, identify dependencies,"
     " suggest an estimate label, and list any questions for the author."
     " You MUST update the issue description and post a summary comment using the gh CLI."
-    "\n\n$issue_content"
+    "\n\nRead the issue content from: $issue_content_file"
 )
 
 PLAN_AGENT_PROMPT = (
@@ -282,7 +282,7 @@ EXPLORE_USER_PROMPT_TEMPLATE = (
     "Investigate the following GitHub issue, research the codebase,"
     " and propose best-practice solutions with trade-offs."
     " You MUST update the issue description and post a summary comment using the gh CLI."
-    "\n\n$issue_content"
+    "\n\nRead the issue content from: $issue_content_file"
 )
 
 DIAGNOSE_AGENT_PROMPT = (
@@ -334,7 +334,7 @@ DIAGNOSE_USER_PROMPT_TEMPLATE = (
     "Investigate the following reported issue, identify potential causes,"
     " and request any additional information needed to confirm the diagnosis."
     " You MUST update the issue description and post a summary comment using the gh CLI."
-    "\n\n$issue_content"
+    "\n\nRead the issue content from: $issue_content_file"
 )
 
 REVIEWPR_AGENT_PROMPT = (
@@ -389,26 +389,26 @@ REVIEWPR_USER_PROMPT_TEMPLATE = (
     "Review the following pull request against its linked GitHub issue."
     " Verify the Definition of Done criteria and post a structured review on the PR"
     " using `gh pr review`."
-    "\n\n$issue_content"
-    "\n\n$pr_content"
+    "\n\nRead the issue content from: $issue_content_file"
+    "\n\nRead the PR content from: $pr_content_file"
 )
 
 REVIEW_USER_PROMPT_TEMPLATE = (
     "Review the following GitHub issue for clarity, completeness, and feasibility."
     " You MUST post your complete review as a comment on the GitHub issue using the gh CLI."
-    "\n\n$issue_content"
+    "\n\nRead the issue content from: $issue_content_file"
 )
 
 PLAN_USER_PROMPT_TEMPLATE = (
     "Analyze the following GitHub issue and produce an implementation plan."
     " You MUST update the issue description and post a summary comment using the gh CLI."
-    "\n\n$issue_content"
+    "\n\nRead the issue content from: $issue_content_file"
 )
 DEVELOP_USER_PROMPT_TEMPLATE = (
     "Implement the following GitHub issue according to its planned implementation."
     " Create a feature branch, open a PR linked to the issue,"
     " and add an issue comment summarizing the changes."
-    "\n\n$issue_content"
+    "\n\nRead the issue content from: $issue_content_file"
 )
 
 
@@ -446,7 +446,7 @@ AGENT_CONFIGS: dict[AgentAction, AgentConfig] = {
         user_prompt_template=PREPARE_USER_PROMPT_TEMPLATE,
         system_prompt_file="PREPARE_SYSTEM_PROMPT.md",
         user_prompt_file="PREPARE_USER_PROMPT.md",
-        required_variables=("issue_content",),
+        required_variables=("issue_content_file",),
     ),
     AgentAction.PLAN: AgentConfig(
         action_name="plan",
@@ -455,7 +455,7 @@ AGENT_CONFIGS: dict[AgentAction, AgentConfig] = {
         user_prompt_template=PLAN_USER_PROMPT_TEMPLATE,
         system_prompt_file="PLAN_SYSTEM_PROMPT.md",
         user_prompt_file="PLAN_USER_PROMPT.md",
-        required_variables=("issue_content",),
+        required_variables=("issue_content_file",),
     ),
     AgentAction.DEVELOP: AgentConfig(
         action_name="develop",
@@ -464,7 +464,7 @@ AGENT_CONFIGS: dict[AgentAction, AgentConfig] = {
         user_prompt_template=DEVELOP_USER_PROMPT_TEMPLATE,
         system_prompt_file="DEVELOP_SYSTEM_PROMPT.md",
         user_prompt_file="DEVELOP_USER_PROMPT.md",
-        required_variables=("issue_content",),
+        required_variables=("issue_content_file",),
     ),
     AgentAction.REVIEW: AgentConfig(
         action_name="issue-review",
@@ -473,7 +473,7 @@ AGENT_CONFIGS: dict[AgentAction, AgentConfig] = {
         user_prompt_template=REVIEW_USER_PROMPT_TEMPLATE,
         system_prompt_file="REVIEW_SYSTEM_PROMPT.md",
         user_prompt_file="REVIEW_USER_PROMPT.md",
-        required_variables=("issue_content",),
+        required_variables=("issue_content_file",),
     ),
     AgentAction.REVIEWPR: AgentConfig(
         action_name="pr-review",
@@ -482,7 +482,7 @@ AGENT_CONFIGS: dict[AgentAction, AgentConfig] = {
         user_prompt_template=REVIEWPR_USER_PROMPT_TEMPLATE,
         system_prompt_file="REVIEWPR_SYSTEM_PROMPT.md",
         user_prompt_file="REVIEWPR_USER_PROMPT.md",
-        required_variables=("issue_content", "pr_content"),
+        required_variables=("issue_content_file", "pr_content_file"),
     ),
     AgentAction.EXPLORE: AgentConfig(
         action_name="explore",
@@ -491,7 +491,7 @@ AGENT_CONFIGS: dict[AgentAction, AgentConfig] = {
         user_prompt_template=EXPLORE_USER_PROMPT_TEMPLATE,
         system_prompt_file="EXPLORE_SYSTEM_PROMPT.md",
         user_prompt_file="EXPLORE_USER_PROMPT.md",
-        required_variables=("issue_content",),
+        required_variables=("issue_content_file",),
     ),
     AgentAction.DIAGNOSE: AgentConfig(
         action_name="diagnose",
@@ -500,6 +500,6 @@ AGENT_CONFIGS: dict[AgentAction, AgentConfig] = {
         user_prompt_template=DIAGNOSE_USER_PROMPT_TEMPLATE,
         system_prompt_file="DIAGNOSE_SYSTEM_PROMPT.md",
         user_prompt_file="DIAGNOSE_USER_PROMPT.md",
-        required_variables=("issue_content",),
+        required_variables=("issue_content_file",),
     ),
 }

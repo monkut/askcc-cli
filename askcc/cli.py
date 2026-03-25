@@ -31,25 +31,25 @@ logger = logging.getLogger(__name__)
 def _build_prompt(
     action: AgentAction, config: AgentConfig, issue_content: str, issue_url: str
 ) -> tuple[str, list[Path]]:
-    """Build the user prompt, writing variable content to tempfiles.
+    """Build the user prompt, writing variable content to tempfiles in /tmp.
 
-    Returns (prompt_text, list_of_tempfile_paths).
+    Returns (prompt_text, list_of_tempfile_paths_to_clean_up).
     """
     owner, repo, issue_number = _parse_issue_url(issue_url)
     issue_file = write_prompt_content(action.value, owner, repo, issue_number, issue_content)
-    prompt_files = [issue_file]
+    tempfiles = [issue_file]
 
     if action == AgentAction.REVIEWPR:
         pr_content = fetch_pr_content(issue_url)
         pr_file = write_prompt_content(action.value, owner, repo, issue_number, pr_content, suffix="_pr")
-        prompt_files.append(pr_file)
+        tempfiles.append(pr_file)
         prompt = Template(config.user_prompt_template).safe_substitute(
             issue_content_file=str(issue_file), pr_content_file=str(pr_file)
         )
     else:
         prompt = Template(config.user_prompt_template).safe_substitute(issue_content_file=str(issue_file))
     logger.info("[%s] Prompt length: %d chars", issue_url, len(prompt))
-    return prompt, prompt_files
+    return prompt, tempfiles
 
 
 def _print_validation_report(issue_url: str, checks: list[CheckResult]) -> None:
@@ -178,7 +178,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
     config = load_agent_config(action)
     issue_content = fetch_github_issue(issue_url)
     try:
-        prompt, prompt_files = _build_prompt(action, config, issue_content, issue_url)
+        prompt, prompt_tempfiles = _build_prompt(action, config, issue_content, issue_url)
     except ValueError:
         logger.exception("[%s] Failed to build prompt for '%s'", issue_url, action.value)
         sys.exit(1)
@@ -188,12 +188,13 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
     try:
         return_code, usage = runner.run(prompt, config=config, issue_url=issue_url, cwd=cwd)
     finally:
-        for f in prompt_files:
+        # Clean up /tmp files created by _build_prompt (not user templates)
+        for f in prompt_tempfiles:
             try:
                 f.unlink(missing_ok=True)
-                logger.debug("Cleaned up prompt file: %s", f)
+                logger.debug("Cleaned up prompt tempfile: %s", f)
             except OSError:
-                logger.warning("Failed to clean up prompt file: %s", f)
+                logger.warning("Failed to clean up prompt tempfile: %s", f)
 
     if usage:
         append_usage_to_last_comment(issue_url, usage)

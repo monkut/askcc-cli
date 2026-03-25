@@ -34,6 +34,11 @@ from askcc.functions import (
 from askcc.runners import ClaudeRunner, get_runner
 
 
+def _mock_runner(return_code: int = 0, usage: dict | None = None) -> MagicMock:
+    """Create a mock runner with the given return values."""
+    return MagicMock(run=MagicMock(return_value=(return_code, usage)))
+
+
 class TestParseIssueUrl:
     def test_valid_issue_url(self):
         owner, repo, issue_number = _parse_issue_url("https://github.com/monkut/askcc-cli/issues/42")
@@ -425,7 +430,7 @@ class TestLanguageOption:
 
     def _run_main(self, extra_args: list[str]) -> str:
         """Run main() with given args and return the prompt passed to runner.run."""
-        mock_runner = MagicMock(run=MagicMock(return_value=(0, None)))
+        mock_runner = _mock_runner()
         with (
             patch("askcc.cli.bootstrap_templates"),
             patch("askcc.cli.validate_issue_labels", return_value=[]),
@@ -726,7 +731,7 @@ class TestDevelopSkipValidation:
             patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.validate_issue_readiness") as mock_validate,
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli.get_runner", return_value=MagicMock(run=MagicMock(return_value=(0, None)))),
+            patch("askcc.cli.get_runner", return_value=_mock_runner()),
             patch("askcc.cli.transition_issue_to_review"),
             patch("sys.argv", ["askcc", "develop", "--skip-validation", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
@@ -934,7 +939,7 @@ class TestDevelopTransitionIntegration:
             patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.validate_issue_readiness", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli.get_runner", return_value=MagicMock(run=MagicMock(return_value=(0, None)))),
+            patch("askcc.cli.get_runner", return_value=_mock_runner()),
             patch("askcc.cli.transition_issue_to_review") as mock_transition,
             patch("sys.argv", ["askcc", "develop", "--skip-validation", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
@@ -949,7 +954,7 @@ class TestDevelopTransitionIntegration:
             patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.validate_issue_readiness", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli.get_runner", return_value=MagicMock(run=MagicMock(return_value=(1, None)))),
+            patch("askcc.cli.get_runner", return_value=_mock_runner(1)),
             patch("askcc.cli.transition_issue_to_review") as mock_transition,
             patch("sys.argv", ["askcc", "develop", "--skip-validation", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
@@ -963,7 +968,7 @@ class TestDevelopTransitionIntegration:
             patch("askcc.cli.bootstrap_templates"),
             patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli.get_runner", return_value=MagicMock(run=MagicMock(return_value=(0, None)))),
+            patch("askcc.cli.get_runner", return_value=_mock_runner()),
             patch("askcc.cli.transition_issue_to_review") as mock_transition,
             patch("sys.argv", ["askcc", "plan", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
@@ -1041,7 +1046,7 @@ class TestPrepareCommand:
             patch("askcc.cli.bootstrap_templates"),
             patch("askcc.cli.validate_issue_labels") as mock_labels,
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli.get_runner", return_value=MagicMock(run=MagicMock(return_value=(0, None)))),
+            patch("askcc.cli.get_runner", return_value=_mock_runner()),
             patch("askcc.cli.transition_issue_to_planning"),
             patch("sys.argv", ["askcc", "prepare", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
@@ -1054,7 +1059,7 @@ class TestPrepareCommand:
         with (
             patch("askcc.cli.bootstrap_templates"),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli.get_runner", return_value=MagicMock(run=MagicMock(return_value=(0, None)))),
+            patch("askcc.cli.get_runner", return_value=_mock_runner()),
             patch("askcc.cli.transition_issue_to_planning") as mock_transition,
             patch("sys.argv", ["askcc", "prepare", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
@@ -1067,7 +1072,7 @@ class TestPrepareCommand:
         with (
             patch("askcc.cli.bootstrap_templates"),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli.get_runner", return_value=MagicMock(run=MagicMock(return_value=(1, None)))),
+            patch("askcc.cli.get_runner", return_value=_mock_runner(1)),
             patch("askcc.cli.transition_issue_to_planning") as mock_transition,
             patch("sys.argv", ["askcc", "prepare", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
@@ -1232,7 +1237,7 @@ class TestReviewprCommand:
     ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/1"
 
     def test_reviewpr_fetches_pr_content(self):
-        mock_runner = MagicMock(run=MagicMock(return_value=(0, None)))
+        mock_runner = _mock_runner()
         with (
             patch("askcc.cli.bootstrap_templates"),
             patch("askcc.cli.validate_issue_labels", return_value=[]),
@@ -1269,7 +1274,7 @@ class TestReviewprCommand:
             patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
             patch("askcc.cli.fetch_pr_content", return_value="pr content"),
-            patch("askcc.cli.get_runner", return_value=MagicMock(run=MagicMock(return_value=(0, None)))),
+            patch("askcc.cli.get_runner", return_value=_mock_runner()),
             patch("askcc.cli.transition_issue_to_review") as mock_review,
             patch("askcc.cli.transition_issue_to_planning") as mock_planning,
             patch("sys.argv", ["askcc", "pr-review", "-g", self.ISSUE_URL]),

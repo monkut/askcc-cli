@@ -28,12 +28,8 @@ class Runner(ABC):
         *,
         issue_url: str,
         cwd: Path,
-        prompt_files: list[Path] | None = None,
     ) -> tuple[int, dict | None]:
-        """Execute a prompt and return (exit_code, usage_dict_or_none).
-
-        Any prompt_files are cleaned up after execution.
-        """
+        """Execute a prompt and return (exit_code, usage_dict_or_none)."""
 
 
 class ClaudeRunner(Runner):
@@ -46,7 +42,6 @@ class ClaudeRunner(Runner):
         *,
         issue_url: str,
         cwd: Path,
-        prompt_files: list[Path] | None = None,
     ) -> tuple[int, dict | None]:
         agent_definition = {config.action_name: {"description": config.description, "prompt": config.system_prompt}}
 
@@ -63,27 +58,20 @@ class ClaudeRunner(Runner):
         ]
 
         # Remove CLAUDECODE env var so the child claude process doesn't think it's nested inside Claude Code
-        env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+        env = os.environ.copy()
+        env.pop("CLAUDECODE", None)
 
         logger.info("[%s] Requesting '%s' from Claude Code ...", issue_url, config.action_name)
         logger.info("[%s] Working directory: %s", issue_url, cwd)
         logger.debug("[%s] Command: %s", issue_url, " ".join("<prompt>" if arg is prompt else arg for arg in cmd))
-        try:
-            result = subprocess.run(  # noqa: S603
-                cmd,
-                text=True,
-                check=False,
-                capture_output=True,
-                cwd=cwd,
-                env=env,
-            )
-        finally:
-            for f in prompt_files or []:
-                try:
-                    f.unlink(missing_ok=True)
-                    logger.debug("Cleaned up prompt file: %s", f)
-                except OSError:
-                    logger.warning("Failed to clean up prompt file: %s", f)
+        result = subprocess.run(  # noqa: S603
+            cmd,
+            text=True,
+            check=False,
+            capture_output=True,
+            cwd=cwd,
+            env=env,
+        )
         logger.info("[%s] Claude Code finished (exit code: %d)", issue_url, result.returncode)
 
         usage = None
@@ -121,7 +109,6 @@ RUNNER_REGISTRY: dict[str, type[Runner]] = {
     "claude": ClaudeRunner,
 }
 
-RUNNER_CHOICES: tuple[str, ...] = tuple(RUNNER_REGISTRY)
 DEFAULT_RUNNER = "claude"
 
 

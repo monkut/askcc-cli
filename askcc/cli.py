@@ -22,7 +22,7 @@ from .functions import (
     validate_issue_readiness,
     write_prompt_content,
 )
-from .runners import DEFAULT_RUNNER, RUNNER_CHOICES, get_runner
+from .runners import DEFAULT_RUNNER, RUNNER_REGISTRY, get_runner
 from .settings import configure_logging
 
 logger = logging.getLogger(__name__)
@@ -98,7 +98,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
     parser.add_argument(
         "-r",
         "--runner",
-        choices=RUNNER_CHOICES,
+        choices=tuple(RUNNER_REGISTRY),
         default=DEFAULT_RUNNER,
         help=f"Runner to execute the task (default: {DEFAULT_RUNNER}).",
     )
@@ -185,7 +185,15 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
     if args.language != SupportedLanguage.ENGLISH:
         prompt += f"\nOutput all comments in {args.language}."
     runner = get_runner(args.runner)
-    return_code, usage = runner.run(prompt, config=config, issue_url=issue_url, cwd=cwd, prompt_files=prompt_files)
+    try:
+        return_code, usage = runner.run(prompt, config=config, issue_url=issue_url, cwd=cwd)
+    finally:
+        for f in prompt_files:
+            try:
+                f.unlink(missing_ok=True)
+                logger.debug("Cleaned up prompt file: %s", f)
+            except OSError:
+                logger.warning("Failed to clean up prompt file: %s", f)
 
     if usage:
         append_usage_to_last_comment(issue_url, usage)

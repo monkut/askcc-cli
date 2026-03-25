@@ -1,7 +1,5 @@
 import argparse
-import json
 import logging
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -24,88 +22,10 @@ from .functions import (
     validate_issue_readiness,
     write_prompt_content,
 )
+from .runners import DEFAULT_RUNNER, RUNNER_CHOICES, get_runner
 from .settings import configure_logging
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_PERMISSION_MODE = "acceptEdits"
-DEBUG_OUTPUT_MAX_CHARS = 2000
-
-
-def _run_claude(
-    prompt: str, config: AgentConfig, *, issue_url: str, cwd: Path, prompt_files: list[Path] | None = None
-) -> tuple[int, dict | None]:
-    """Run claude CLI with the given prompt, capturing JSON output for token usage reporting.
-
-    Any prompt_files are cleaned up after execution.
-    """
-    agent_definition = {config.action_name: {"description": config.description, "prompt": config.system_prompt}}
-
-    cmd = [
-        "claude",
-        "-p",
-        prompt,
-        "--output-format",
-        "json",
-        "--dangerously-skip-permissions",
-        "--worktree",
-        "--agents",
-        json.dumps(agent_definition),
-    ]
-
-    # Remove CLAUDECODE env var so the child claude process doesn't think it's nested inside Claude Code
-    env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
-
-    logger.info("[%s] Requesting '%s' from Claude Code ...", issue_url, config.action_name)
-    logger.info("[%s] Working directory: %s", issue_url, cwd)
-    logger.debug("[%s] Command: %s", issue_url, " ".join("<prompt>" if arg is prompt else arg for arg in cmd))
-    try:
-        result = subprocess.run(  # noqa: S603
-            cmd,
-            text=True,
-            check=False,
-            capture_output=True,
-            cwd=cwd,
-            env=env,
-        )
-    finally:
-        for f in prompt_files or []:
-            try:
-                f.unlink(missing_ok=True)
-                logger.debug("Cleaned up prompt file: %s", f)
-            except OSError:
-                logger.warning("Failed to clean up prompt file: %s", f)
-    logger.info("[%s] Claude Code finished (exit code: %d)", issue_url, result.returncode)
-
-    usage = None
-    if result.stdout:
-        logger.debug("[%s] Claude Code raw output: %s", issue_url, result.stdout[:DEBUG_OUTPUT_MAX_CHARS])
-        try:
-            data = json.loads(result.stdout)
-            response_text = data.get("result", "")
-            if response_text:
-                print(response_text)  # noqa: T201
-            usage = data.get("usage")
-            if usage:
-                model = data.get("model")
-                if model:
-                    usage["model"] = model
-                logger.info(
-                    "[%s] Token usage — model: %s, input: %s, output: %s",
-                    issue_url,
-                    usage.get("model", "N/A"),
-                    usage.get("input_tokens", "N/A"),
-                    usage.get("output_tokens", "N/A"),
-                )
-        except json.JSONDecodeError:
-            logger.warning("[%s] Failed to parse Claude JSON output", issue_url)
-            print(result.stdout)  # noqa: T201
-
-    if result.stderr:
-        log_level = logging.ERROR if result.returncode != 0 else logging.DEBUG
-        logger.log(log_level, "[%s] Claude Code stderr:\n%s", issue_url, result.stderr)
-
-    return result.returncode, usage
 
 
 def _build_prompt(
@@ -174,6 +94,13 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
         choices=[lang.value for lang in SupportedLanguage],
         default=SupportedLanguage.ENGLISH,
         help="Language for agent output comments (default: english).",
+    )
+    parser.add_argument(
+        "-r",
+        "--runner",
+        choices=RUNNER_CHOICES,
+        default=DEFAULT_RUNNER,
+        help=f"Runner to execute the task (default: {DEFAULT_RUNNER}).",
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -257,7 +184,8 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
         sys.exit(1)
     if args.language != SupportedLanguage.ENGLISH:
         prompt += f"\nOutput all comments in {args.language}."
-    return_code, usage = _run_claude(prompt, config=config, issue_url=issue_url, cwd=cwd, prompt_files=prompt_files)
+    runner = get_runner(args.runner)
+    return_code, usage = runner.run(prompt, config=config, issue_url=issue_url, cwd=cwd, prompt_files=prompt_files)
 
     if usage:
         append_usage_to_last_comment(issue_url, usage)

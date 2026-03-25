@@ -4,11 +4,11 @@ import json
 import subprocess
 from pathlib import Path
 from string import Template
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from askcc.cli import _run_claude, main
+from askcc.cli import main
 from askcc.definitions import AGENT_CONFIGS, AgentAction, AgentConfig, SupportedLanguage
 from askcc.functions import (
     _add_issue_label,
@@ -31,6 +31,7 @@ from askcc.functions import (
     validate_template,
     write_prompt_content,
 )
+from askcc.runners import ClaudeRunner, get_runner
 
 
 class TestParseIssueUrl:
@@ -266,7 +267,7 @@ class TestStringTemplateSubstitution:
             filepath.unlink(missing_ok=True)
 
 
-class TestRunClaude:
+class TestClaudeRunner:
     ISSUE_URL = "https://github.com/test/repo/issues/1"
 
     @pytest.fixture
@@ -280,8 +281,16 @@ class TestRunClaude:
             user_prompt_file="TEST_USER_PROMPT.md",
         )
 
+    @pytest.fixture
+    def runner(self) -> ClaudeRunner:
+        return ClaudeRunner()
+
     def test_logs_token_usage(
-        self, agent_config: AgentConfig, capfd: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
+        self,
+        runner: ClaudeRunner,
+        agent_config: AgentConfig,
+        capfd: pytest.CaptureFixture[str],
+        caplog: pytest.LogCaptureFixture,
     ):
         claude_response = json.dumps(
             {
@@ -293,10 +302,10 @@ class TestRunClaude:
         mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=claude_response, stderr="")
 
         with (
-            caplog.at_level("INFO", logger="askcc.cli"),
-            patch("askcc.cli.subprocess.run", return_value=mock_result) as mock_run,
+            caplog.at_level("INFO", logger="askcc.runners"),
+            patch("askcc.runners.subprocess.run", return_value=mock_result) as mock_run,
         ):
-            exit_code, usage = _run_claude("test prompt", config=agent_config, issue_url=self.ISSUE_URL, cwd=Path.cwd())
+            exit_code, usage = runner.run("test prompt", config=agent_config, issue_url=self.ISSUE_URL, cwd=Path.cwd())
 
         assert exit_code == 0
         assert usage == {"input_tokens": 1500, "output_tokens": 300, "model": "claude-sonnet-4-6-20250514"}
@@ -308,12 +317,16 @@ class TestRunClaude:
         mock_run.assert_called_once()
 
     def test_handles_invalid_json(
-        self, agent_config: AgentConfig, capfd: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
+        self,
+        runner: ClaudeRunner,
+        agent_config: AgentConfig,
+        capfd: pytest.CaptureFixture[str],
+        caplog: pytest.LogCaptureFixture,
     ):
         mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="not json", stderr="")
 
-        with patch("askcc.cli.subprocess.run", return_value=mock_result):
-            exit_code, usage = _run_claude("test prompt", config=agent_config, issue_url=self.ISSUE_URL, cwd=Path.cwd())
+        with patch("askcc.runners.subprocess.run", return_value=mock_result):
+            exit_code, usage = runner.run("test prompt", config=agent_config, issue_url=self.ISSUE_URL, cwd=Path.cwd())
 
         assert exit_code == 0
         assert usage is None
@@ -321,24 +334,34 @@ class TestRunClaude:
         assert "not json" in captured.out
         assert "Failed to parse Claude JSON output" in caplog.text
 
-    def test_returns_nonzero_exit_code(self, agent_config: AgentConfig):
+    def test_returns_nonzero_exit_code(self, runner: ClaudeRunner, agent_config: AgentConfig):
         mock_result = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="error occurred")
 
-        with patch("askcc.cli.subprocess.run", return_value=mock_result):
-            exit_code, usage = _run_claude("test prompt", config=agent_config, issue_url=self.ISSUE_URL, cwd=Path.cwd())
+        with patch("askcc.runners.subprocess.run", return_value=mock_result):
+            exit_code, usage = runner.run("test prompt", config=agent_config, issue_url=self.ISSUE_URL, cwd=Path.cwd())
 
         assert exit_code == 1
         assert usage is None
 
-    def test_returns_none_usage_when_no_usage_key(self, agent_config: AgentConfig):
+    def test_returns_none_usage_when_no_usage_key(self, runner: ClaudeRunner, agent_config: AgentConfig):
         claude_response = json.dumps({"result": "Done."})
         mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=claude_response, stderr="")
 
-        with patch("askcc.cli.subprocess.run", return_value=mock_result):
-            exit_code, usage = _run_claude("test prompt", config=agent_config, issue_url=self.ISSUE_URL, cwd=Path.cwd())
+        with patch("askcc.runners.subprocess.run", return_value=mock_result):
+            exit_code, usage = runner.run("test prompt", config=agent_config, issue_url=self.ISSUE_URL, cwd=Path.cwd())
 
         assert exit_code == 0
         assert usage is None
+
+
+class TestGetRunner:
+    def test_get_claude_runner(self):
+        runner = get_runner("claude")
+        assert isinstance(runner, ClaudeRunner)
+
+    def test_unknown_runner_raises(self):
+        with pytest.raises(ValueError, match="Unknown runner"):
+            get_runner("nonexistent")
 
 
 class TestAppendUsageToLastComment:
@@ -401,17 +424,18 @@ class TestLanguageOption:
     ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/1"
 
     def _run_main(self, extra_args: list[str]) -> str:
-        """Run main() with given args and return the prompt passed to _run_claude."""
+        """Run main() with given args and return the prompt passed to runner.run."""
+        mock_runner = MagicMock(run=MagicMock(return_value=(0, None)))
         with (
             patch("askcc.cli.bootstrap_templates"),
             patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli._run_claude", return_value=(0, None)) as mock_claude,
+            patch("askcc.cli.get_runner", return_value=mock_runner),
             patch("sys.argv", ["askcc", *extra_args, AgentAction.PLAN, "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
         ):
             main()
-        return mock_claude.call_args[0][0]
+        return mock_runner.run.call_args[0][0]
 
     def test_japanese_appends_instruction(self):
         prompt = self._run_main(["--language", SupportedLanguage.JAPANESE])
@@ -702,7 +726,7 @@ class TestDevelopSkipValidation:
             patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.validate_issue_readiness") as mock_validate,
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli._run_claude", return_value=(0, None)),
+            patch("askcc.cli.get_runner", return_value=MagicMock(run=MagicMock(return_value=(0, None)))),
             patch("askcc.cli.transition_issue_to_review"),
             patch("sys.argv", ["askcc", "develop", "--skip-validation", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
@@ -910,7 +934,7 @@ class TestDevelopTransitionIntegration:
             patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.validate_issue_readiness", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli._run_claude", return_value=(0, None)),
+            patch("askcc.cli.get_runner", return_value=MagicMock(run=MagicMock(return_value=(0, None)))),
             patch("askcc.cli.transition_issue_to_review") as mock_transition,
             patch("sys.argv", ["askcc", "develop", "--skip-validation", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
@@ -925,7 +949,7 @@ class TestDevelopTransitionIntegration:
             patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.validate_issue_readiness", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli._run_claude", return_value=(1, None)),
+            patch("askcc.cli.get_runner", return_value=MagicMock(run=MagicMock(return_value=(1, None)))),
             patch("askcc.cli.transition_issue_to_review") as mock_transition,
             patch("sys.argv", ["askcc", "develop", "--skip-validation", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
@@ -939,7 +963,7 @@ class TestDevelopTransitionIntegration:
             patch("askcc.cli.bootstrap_templates"),
             patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli._run_claude", return_value=(0, None)),
+            patch("askcc.cli.get_runner", return_value=MagicMock(run=MagicMock(return_value=(0, None)))),
             patch("askcc.cli.transition_issue_to_review") as mock_transition,
             patch("sys.argv", ["askcc", "plan", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
@@ -1017,7 +1041,7 @@ class TestPrepareCommand:
             patch("askcc.cli.bootstrap_templates"),
             patch("askcc.cli.validate_issue_labels") as mock_labels,
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli._run_claude", return_value=(0, None)),
+            patch("askcc.cli.get_runner", return_value=MagicMock(run=MagicMock(return_value=(0, None)))),
             patch("askcc.cli.transition_issue_to_planning"),
             patch("sys.argv", ["askcc", "prepare", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
@@ -1030,7 +1054,7 @@ class TestPrepareCommand:
         with (
             patch("askcc.cli.bootstrap_templates"),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli._run_claude", return_value=(0, None)),
+            patch("askcc.cli.get_runner", return_value=MagicMock(run=MagicMock(return_value=(0, None)))),
             patch("askcc.cli.transition_issue_to_planning") as mock_transition,
             patch("sys.argv", ["askcc", "prepare", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
@@ -1043,7 +1067,7 @@ class TestPrepareCommand:
         with (
             patch("askcc.cli.bootstrap_templates"),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli._run_claude", return_value=(1, None)),
+            patch("askcc.cli.get_runner", return_value=MagicMock(run=MagicMock(return_value=(1, None)))),
             patch("askcc.cli.transition_issue_to_planning") as mock_transition,
             patch("sys.argv", ["askcc", "prepare", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
@@ -1208,19 +1232,20 @@ class TestReviewprCommand:
     ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/1"
 
     def test_reviewpr_fetches_pr_content(self):
+        mock_runner = MagicMock(run=MagicMock(return_value=(0, None)))
         with (
             patch("askcc.cli.bootstrap_templates"),
             patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
             patch("askcc.cli.fetch_pr_content", return_value="pr diff content") as mock_pr,
-            patch("askcc.cli._run_claude", return_value=(0, None)) as mock_claude,
+            patch("askcc.cli.get_runner", return_value=mock_runner),
             patch("sys.argv", ["askcc", "pr-review", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
         ):
             main()
 
         mock_pr.assert_called_once_with(self.ISSUE_URL)
-        prompt = mock_claude.call_args[0][0]
+        prompt = mock_runner.run.call_args[0][0]
         assert "askcc_pr-review_monkut-askcc-cli_1.md" in prompt
         assert "askcc_pr-review_monkut-askcc-cli_1_pr.md" in prompt
 
@@ -1244,7 +1269,7 @@ class TestReviewprCommand:
             patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
             patch("askcc.cli.fetch_pr_content", return_value="pr content"),
-            patch("askcc.cli._run_claude", return_value=(0, None)),
+            patch("askcc.cli.get_runner", return_value=MagicMock(run=MagicMock(return_value=(0, None)))),
             patch("askcc.cli.transition_issue_to_review") as mock_review,
             patch("askcc.cli.transition_issue_to_planning") as mock_planning,
             patch("sys.argv", ["askcc", "pr-review", "-g", self.ISSUE_URL]),

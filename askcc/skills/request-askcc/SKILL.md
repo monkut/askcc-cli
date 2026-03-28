@@ -1,6 +1,6 @@
 ---
 name: request-askcc
-description: Request PREPARE, VALIDATE, ISSUE-REVIEW, PR-REVIEW, PLAN, DEVELOP, EXPLORE or DIAGNOSE actions for GitHub issues via the askcc CLI. Use when a user asks to prepare, validate, review an issue, plan, develop, explore, diagnose, or review a PR for a GitHub issue.
+description: Request PREPARE, VALIDATE, ISSUE-REVIEW, PR-REVIEW, PLAN, DEVELOP, EXPLORE, DIAGNOSE, or FIX-CI actions for GitHub issues via the askcc CLI. Use when a user asks to prepare, validate, review an issue, plan, develop, explore, diagnose, fix CI, or review a PR for a GitHub issue.
 ---
 
 # Request GitHub Issue Action
@@ -17,6 +17,7 @@ Use the `askcc` tool to request processing of GitHub issues defined by a URL.
 - When a user asks to EXPLORE a github issue (investigate and propose solutions), use `askcc explore`.
 - When a user asks to DIAGNOSE a github issue (root cause analysis), use `askcc diagnose`.
 - When a user asks to REVIEW a PR (code review of a pull request linked to an issue), use `askcc pr-review`.
+- When a user asks to FIX CI failures on a branch or PR (fix failing tests, lint errors, or build errors), use `askcc fix-ci`.
 
 ## Examples
 
@@ -75,6 +76,20 @@ Use the `askcc` tool to request processing of GitHub issues defined by a URL.
   ```bash
   # This fetches the issue and its linked PR, reviews the code against Definition of Done criteria, and posts a structured review on the PR.
   askcc pr-review --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
+  ```
+
+- "Fix CI for https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1"
+
+  ```bash
+  # This fetches the linked PR, identifies failing CI checks, and implements fixes to make them pass.
+  askcc fix-ci --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
+  ```
+
+- "Fix CI on the current branch" (no issue URL)
+
+  ```bash
+  # This auto-detects the open PR for the current branch, identifies failing CI checks, and implements fixes.
+  askcc fix-ci --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY}
   ```
 
 WARNING: If the `{TARGET DEVELOPMENT REPOSITORY}` cannot be determined, ASK user in Slack.

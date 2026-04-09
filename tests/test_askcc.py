@@ -1015,53 +1015,50 @@ class TestDevelopTransitionIntegration:
 
 
 class TestDetectVerificationCommands:
-    def test_detects_poe_tasks(self, tmp_path: Path):
+    def test_reads_from_pyproject_toml(self, tmp_path: Path):
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text(
-            '[tool.poe.tasks]\ncheck = "uv run ruff check"\ntypecheck = "uv run pyright"\n\n'
-            '[tool.poe.tasks.test]\nshell = "uv run pytest"\n'
+            '[[tool.askcc.verify]]\nname = "tests"\ncmd = "uv run poe test"\n\n'
+            '[[tool.askcc.verify]]\nname = "lint"\ncmd = "uv run poe check"\n'
         )
         commands = _detect_verification_commands(tmp_path)
-        names = [name for name, _ in commands]
-        assert "tests" in names
-        assert "lint" in names
-        assert "typecheck" in names
+        assert commands == [
+            ("tests", ["uv", "run", "poe", "test"]),
+            ("lint", ["uv", "run", "poe", "check"]),
+        ]
 
-    def test_detects_direct_tools(self, tmp_path: Path):
-        pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('[project]\nname = "test"\n\n[dependency-groups]\ndev = ["pytest", "ruff", "pyright"]\n')
+    def test_reads_from_askcc_toml(self, tmp_path: Path):
+        askcc_toml = tmp_path / ".askcc.toml"
+        askcc_toml.write_text(
+            '[[verify]]\nname = "tests"\ncmd = "npm test"\n\n[[verify]]\nname = "lint"\ncmd = "npm run lint"\n'
+        )
         commands = _detect_verification_commands(tmp_path)
-        names = [name for name, _ in commands]
-        assert "tests" in names
-        assert "lint" in names
-        assert "typecheck" in names
+        assert commands == [
+            ("tests", ["npm", "test"]),
+            ("lint", ["npm", "run", "lint"]),
+        ]
 
-    def test_detects_npm_scripts(self, tmp_path: Path):
-        package_json = tmp_path / "package.json"
-        package_json.write_text('{"scripts": {"test": "jest", "lint": "eslint ."}}')
+    def test_pyproject_takes_precedence_over_askcc_toml(self, tmp_path: Path):
+        (tmp_path / "pyproject.toml").write_text('[[tool.askcc.verify]]\nname = "tests"\ncmd = "make test"\n')
+        (tmp_path / ".askcc.toml").write_text('[[verify]]\nname = "tests"\ncmd = "npm test"\n')
         commands = _detect_verification_commands(tmp_path)
-        names = [name for name, _ in commands]
-        assert "tests" in names
-        assert "lint" in names
-
-    def test_detects_makefile_targets(self, tmp_path: Path):
-        makefile = tmp_path / "Makefile"
-        makefile.write_text("test:\n\tpytest\n\nlint:\n\truff check\n")
-        commands = _detect_verification_commands(tmp_path)
-        names = [name for name, _ in commands]
-        assert "tests" in names
-        assert "lint" in names
+        assert commands == [("tests", ["make", "test"])]
 
     def test_returns_empty_when_no_config(self, tmp_path: Path):
         commands = _detect_verification_commands(tmp_path)
         assert commands == []
 
-    def test_pyproject_takes_precedence_over_package_json(self, tmp_path: Path):
-        (tmp_path / "pyproject.toml").write_text('[dependency-groups]\ndev = ["pytest"]\n')
-        (tmp_path / "package.json").write_text('{"scripts": {"test": "jest"}}')
+    def test_returns_empty_when_pyproject_has_no_verify_section(self, tmp_path: Path):
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "myapp"\n')
         commands = _detect_verification_commands(tmp_path)
-        # Should use uv run pytest, not npm test
-        assert any("uv" in cmd[0] for _, cmd in commands)
+        assert commands == []
+
+    def test_skips_entries_missing_required_fields(self, tmp_path: Path):
+        (tmp_path / ".askcc.toml").write_text(
+            '[[verify]]\nname = "tests"\ncmd = "pytest"\n\n[[verify]]\nname = "incomplete"\n'  # missing cmd
+        )
+        commands = _detect_verification_commands(tmp_path)
+        assert commands == [("tests", ["pytest"])]
 
 
 class TestRunProjectVerification:
@@ -1072,7 +1069,9 @@ class TestRunProjectVerification:
         assert "skipping" in result.message.lower()
 
     def test_all_checks_pass(self, tmp_path: Path):
-        (tmp_path / "pyproject.toml").write_text('[dependency-groups]\ndev = ["pytest", "ruff"]\n')
+        (tmp_path / ".askcc.toml").write_text(
+            '[[verify]]\nname = "tests"\ncmd = "pytest"\n\n[[verify]]\nname = "lint"\ncmd = "ruff check"\n'
+        )
         ok = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
         with patch("askcc.functions.subprocess.run", return_value=ok):
             result = _run_project_verification(tmp_path)
@@ -1080,7 +1079,9 @@ class TestRunProjectVerification:
         assert all(c.passed for c in result.checks)
 
     def test_partial_failure(self, tmp_path: Path):
-        (tmp_path / "pyproject.toml").write_text('[dependency-groups]\ndev = ["pytest", "ruff"]\n')
+        (tmp_path / ".askcc.toml").write_text(
+            '[[verify]]\nname = "tests"\ncmd = "pytest"\n\n[[verify]]\nname = "lint"\ncmd = "ruff check"\n'
+        )
         ok = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
         fail = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="lint error found")
         with patch("askcc.functions.subprocess.run", side_effect=[ok, fail]):
@@ -1089,14 +1090,14 @@ class TestRunProjectVerification:
         assert result.message == "1/2 checks passed"
 
     def test_command_not_found(self, tmp_path: Path):
-        (tmp_path / "pyproject.toml").write_text('[dependency-groups]\ndev = ["pytest"]\n')
+        (tmp_path / ".askcc.toml").write_text('[[verify]]\nname = "tests"\ncmd = "pytest"\n')
         with patch("askcc.functions.subprocess.run", side_effect=FileNotFoundError):
             result = _run_project_verification(tmp_path)
         assert result.passed is False
         assert "command not found" in result.checks[0].message
 
     def test_timeout(self, tmp_path: Path):
-        (tmp_path / "pyproject.toml").write_text('[dependency-groups]\ndev = ["pytest"]\n')
+        (tmp_path / ".askcc.toml").write_text('[[verify]]\nname = "tests"\ncmd = "pytest"\n')
         with patch("askcc.functions.subprocess.run", side_effect=subprocess.TimeoutExpired("cmd", 300)):
             result = _run_project_verification(tmp_path)
         assert result.passed is False

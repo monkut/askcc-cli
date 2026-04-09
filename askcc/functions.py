@@ -1,9 +1,11 @@
 import json
 import logging
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
+import tomllib
 from dataclasses import dataclass, replace
 from importlib.resources import files as package_files
 from pathlib import Path
@@ -218,68 +220,35 @@ class VerificationResult:
 VERIFICATION_TIMEOUT = 300  # 5 minutes per command
 
 
-_POE_TASK_CHECKS: tuple[tuple[str, str, list[str]], ...] = (
-    ("test", "tests", ["uv", "run", "poe", "test"]),
-    ("check", "lint", ["uv", "run", "poe", "check"]),
-    ("typecheck", "typecheck", ["uv", "run", "poe", "typecheck"]),
-)
-
-_DIRECT_TOOL_CHECKS: tuple[tuple[str, str, list[str]], ...] = (
-    ("pytest", "tests", ["uv", "run", "pytest"]),
-    ("ruff", "lint", ["uv", "run", "ruff", "check"]),
-    ("pyright", "typecheck", ["uv", "run", "pyright"]),
-)
-
-
-def _has_poe_task(content: str, task_name: str) -> bool:
-    """Check if a poe task is defined in pyproject.toml content."""
-    if f"[tool.poe.tasks.{task_name}]" in content:
-        return True
-    return re.search(rf"^{task_name}\s*=", content, re.MULTILINE) is not None
-
-
-def _detect_pyproject_commands(content: str) -> list[tuple[str, list[str]]]:
-    """Detect verification commands from pyproject.toml content."""
-    commands: list[tuple[str, list[str]]] = []
-    if "poe.tasks" in content:
-        for task_name, check_name, cmd in _POE_TASK_CHECKS:
-            if _has_poe_task(content, task_name):
-                commands.append((check_name, cmd))
-    else:
-        for tool_name, check_name, cmd in _DIRECT_TOOL_CHECKS:
-            if tool_name in content:
-                commands.append((check_name, cmd))
-    return commands
-
-
 def _detect_verification_commands(cwd: Path) -> list[tuple[str, list[str]]]:
-    """Detect project verification commands based on config files present in cwd.
+    """Load user-configured verification commands from project config.
+
+    Checks (in order):
+    1. ``[tool.askcc.verify]`` in ``pyproject.toml``
+    2. ``[[verify]]`` in ``.askcc.toml``
 
     Returns a list of (check_name, command_args) tuples.
+    If no config is found, returns an empty list (verification is skipped).
     """
     pyproject = cwd / "pyproject.toml"
     if pyproject.exists():
-        return _detect_pyproject_commands(pyproject.read_text())
+        try:
+            data = tomllib.loads(pyproject.read_text())
+            entries = data.get("tool", {}).get("askcc", {}).get("verify", [])
+            if entries:
+                return [(e["name"], shlex.split(e["cmd"])) for e in entries if "name" in e and "cmd" in e]
+        except (tomllib.TOMLDecodeError, KeyError):
+            logger.warning("Failed to parse [tool.askcc.verify] from %s", pyproject)
 
-    package_json = cwd / "package.json"
-    if package_json.exists():
-        content = package_json.read_text()
-        commands: list[tuple[str, list[str]]] = []
-        if '"test"' in content:
-            commands.append(("tests", ["npm", "test"]))
-        if '"lint"' in content:
-            commands.append(("lint", ["npm", "run", "lint"]))
-        return commands
-
-    makefile = cwd / "Makefile"
-    if makefile.exists():
-        content = makefile.read_text()
-        commands = []
-        if "test:" in content or "test :" in content:
-            commands.append(("tests", ["make", "test"]))
-        if "lint:" in content or "lint :" in content:
-            commands.append(("lint", ["make", "lint"]))
-        return commands
+    askcc_toml = cwd / ".askcc.toml"
+    if askcc_toml.exists():
+        try:
+            data = tomllib.loads(askcc_toml.read_text())
+            entries = data.get("verify", [])
+            if entries:
+                return [(e["name"], shlex.split(e["cmd"])) for e in entries if "name" in e and "cmd" in e]
+        except (tomllib.TOMLDecodeError, KeyError):
+            logger.warning("Failed to parse [[verify]] from %s", askcc_toml)
 
     return []
 

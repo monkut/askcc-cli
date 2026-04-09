@@ -1,9 +1,11 @@
 import json
 import logging
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
+import tomllib
 from dataclasses import dataclass, replace
 from importlib.resources import files as package_files
 from pathlib import Path
@@ -206,6 +208,85 @@ class CheckResult:
     name: str
     passed: bool
     message: str
+
+
+@dataclass(frozen=True)
+class VerificationResult:
+    passed: bool
+    message: str
+    checks: list[CheckResult]
+
+
+VERIFICATION_TIMEOUT = 300  # 5 minutes per command
+
+
+def _detect_verification_commands(cwd: Path) -> list[tuple[str, list[str]]]:
+    """Load user-configured verification commands from project config.
+
+    Checks (in order):
+    1. ``[tool.askcc.verify]`` in ``pyproject.toml``
+    2. ``[[verify]]`` in ``.askcc.toml``
+
+    Returns a list of (check_name, command_args) tuples.
+    If no config is found, returns an empty list (verification is skipped).
+    """
+    pyproject = cwd / "pyproject.toml"
+    if pyproject.exists():
+        try:
+            data = tomllib.loads(pyproject.read_text())
+            entries = data.get("tool", {}).get("askcc", {}).get("verify", [])
+            if entries:
+                return [(e["name"], shlex.split(e["cmd"])) for e in entries if "name" in e and "cmd" in e]
+        except (tomllib.TOMLDecodeError, KeyError):
+            logger.warning("Failed to parse [tool.askcc.verify] from %s", pyproject)
+
+    askcc_toml = cwd / ".askcc.toml"
+    if askcc_toml.exists():
+        try:
+            data = tomllib.loads(askcc_toml.read_text())
+            entries = data.get("verify", [])
+            if entries:
+                return [(e["name"], shlex.split(e["cmd"])) for e in entries if "name" in e and "cmd" in e]
+        except (tomllib.TOMLDecodeError, KeyError):
+            logger.warning("Failed to parse [[verify]] from %s", askcc_toml)
+
+    return []
+
+
+def _run_project_verification(cwd: Path) -> VerificationResult:
+    """Run detected project verification commands and return aggregate result."""
+    commands = _detect_verification_commands(cwd)
+    if not commands:
+        logger.info("No verification commands detected in %s, skipping verification", cwd)
+        return VerificationResult(passed=True, message="No verification commands detected, skipping", checks=[])
+
+    checks: list[CheckResult] = []
+    for name, cmd in commands:
+        logger.info("Running verification: %s (%s)", name, " ".join(cmd))
+        try:
+            result = subprocess.run(  # noqa: S603
+                cmd,
+                capture_output=True,
+                text=True,
+                check=False,
+                cwd=cwd,
+                timeout=VERIFICATION_TIMEOUT,
+            )
+            if result.returncode == 0:
+                checks.append(CheckResult(name=name, passed=True, message="passed"))
+            else:
+                stderr_snippet = result.stderr.strip()[:200] if result.stderr else result.stdout.strip()[:200]
+                checks.append(CheckResult(name=name, passed=False, message=f"failed: {stderr_snippet}"))
+        except FileNotFoundError:
+            checks.append(CheckResult(name=name, passed=False, message=f"command not found: {cmd[0]}"))
+        except subprocess.TimeoutExpired:
+            checks.append(CheckResult(name=name, passed=False, message=f"timed out after {VERIFICATION_TIMEOUT}s"))
+
+    all_passed = all(c.passed for c in checks)
+    passed_count = sum(1 for c in checks if c.passed)
+    total = len(checks)
+    message = f"{passed_count}/{total} checks passed"
+    return VerificationResult(passed=all_passed, message=message, checks=checks)
 
 
 def _has_acceptance_criteria(body: str) -> bool:

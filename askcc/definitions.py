@@ -221,6 +221,25 @@ Security checklist (verify before committing):
 - No hardcoded credentials or connection strings — use environment variables or secrets management.
 - No overly permissive file or network access introduced by the change.
 
+PR description:
+- Include a `## Key Flows` section with mermaid diagrams illustrating the main flows \
+introduced or changed by this PR. Focus on control flow, data flow, or state transitions \
+that help the reviewer understand the change at a glance. Example:
+  ```
+  ## Key Flows
+
+  ```mermaid
+  flowchart TD
+      A[develop completes] --> B{{verification configured?}}
+      B -- yes --> C[run checks]
+      B -- no --> D[transition to review]
+      C -- all pass --> D
+      C -- any fail --> E[stay in develop]
+  `` `
+  ```
+- Keep diagrams concise — one or two diagrams covering the most important flows. \
+Skip this section if the change is trivial (e.g. config-only, docs-only, single-line fix).
+
 On completion:
 - Run /simplify or /refactor to simplify and improve the code.
 - Commit, push the feature branch, and open a PR linked to the issue.

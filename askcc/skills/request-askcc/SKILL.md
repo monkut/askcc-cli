@@ -25,7 +25,7 @@ Use the `askcc` tool to request processing of GitHub issues defined by a URL.
 
   ```bash
   # This fleshes out a backlog issue by suggesting acceptance criteria, identifying dependencies, and proposing an estimate to get it ready for planning.
-  askcc prepare --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
+  askcc --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} prepare --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
   ```
 
 - "Validate https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1"
@@ -39,14 +39,14 @@ Use the `askcc` tool to request processing of GitHub issues defined by a URL.
 
   ```bash
   # This analyzes a prepared issue against the codebase and produces a step-by-step implementation plan.
-  askcc plan --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
+  askcc --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} plan --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
   ```
 
 - "Proceed with development of https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1"
 
   ```bash
   # This proceeds to implement/develop a github issue that has a clear development/implementation plan.
-  askcc develop --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
+  askcc --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} develop --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
 
   ```
 
@@ -61,35 +61,35 @@ Use the `askcc` tool to request processing of GitHub issues defined by a URL.
 
   ```bash
   # This investigates the github issue, researches the codebase, and proposes best-practice solutions with trade-offs.
-  askcc explore --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
+  askcc --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} explore --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
   ```
 
 - "Diagnose https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1"
 
   ```bash
   # This investigates the reported issue, identifies potential root causes, and requests additional information.
-  askcc diagnose --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
+  askcc --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} diagnose --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
   ```
 
 - "Review the PR for https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1"
 
   ```bash
   # This fetches the issue and its linked PR, reviews the code against Definition of Done criteria, and posts a structured review on the PR.
-  askcc pr-review --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
+  askcc --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} pr-review --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
   ```
 
 - "Fix CI for https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1"
 
   ```bash
   # This fetches the linked PR, identifies failing CI checks, and implements fixes to make them pass.
-  askcc fix-ci --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
+  askcc --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} fix-ci --github-issue-url https://github.com/{GITHUB ORG}/{GITHUB REPO}/issues/1
   ```
 
 - "Fix CI on the current branch" (no issue URL)
 
   ```bash
   # This auto-detects the open PR for the current branch, identifies failing CI checks, and implements fixes.
-  askcc fix-ci --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY}
+  askcc --cwd {PROJECTS DIRECTORY}/{TARGET DEVELOPMENT REPOSITORY} fix-ci
   ```
 
 WARNING: If the `{TARGET DEVELOPMENT REPOSITORY}` cannot be determined, ASK user in Slack.

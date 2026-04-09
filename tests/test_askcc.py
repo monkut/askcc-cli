@@ -11,12 +11,16 @@ import pytest
 from askcc.cli import main
 from askcc.definitions import AGENT_CONFIGS, AgentAction, AgentConfig, SupportedLanguage
 from askcc.functions import (
+    CheckResult,
+    VerificationResult,
     _add_issue_label,
+    _detect_verification_commands,
     _find_linked_pr_number,
     _find_option_id,
     _has_acceptance_criteria,
     _has_dependencies_section,
     _parse_issue_url,
+    _run_project_verification,
     _swap_issue_labels,
     _transition_project_fields,
     append_usage_to_last_comment,
@@ -728,12 +732,14 @@ class TestDevelopSkipValidation:
 
     def test_develop_skip_validation_bypasses_check(self):
         """Develop --skip-validation skips readiness validation and runs Claude."""
+        verification_passed = VerificationResult(passed=True, message="skipped", checks=[])
         with (
             patch("askcc.cli.bootstrap_templates"),
             patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.validate_issue_readiness") as mock_validate,
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
             patch("askcc.cli.get_runner", return_value=_mock_runner()),
+            patch("askcc.cli._run_project_verification", return_value=verification_passed),
             patch("askcc.cli.transition_issue_to_review"),
             patch("sys.argv", ["askcc", "develop", "--skip-validation", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
@@ -932,6 +938,17 @@ class TestTransitionIssueToReview:
         mock_project.assert_called_once_with("/usr/bin/gh", "monkut", "askcc-cli", 42)
 
 
+_VERIFICATION_PASSED = VerificationResult(passed=True, message="3/3 checks passed", checks=[])
+_VERIFICATION_FAILED = VerificationResult(
+    passed=False,
+    message="1/2 checks passed",
+    checks=[
+        CheckResult(name="tests", passed=True, message="passed"),
+        CheckResult(name="lint", passed=False, message="failed: ruff errors"),
+    ],
+)
+
+
 class TestDevelopTransitionIntegration:
     ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/1"
 
@@ -942,6 +959,7 @@ class TestDevelopTransitionIntegration:
             patch("askcc.cli.validate_issue_readiness", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
             patch("askcc.cli.get_runner", return_value=_mock_runner()),
+            patch("askcc.cli._run_project_verification", return_value=_VERIFICATION_PASSED),
             patch("askcc.cli.transition_issue_to_review") as mock_transition,
             patch("sys.argv", ["askcc", "develop", "--skip-validation", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
@@ -949,6 +967,22 @@ class TestDevelopTransitionIntegration:
             main()
 
         mock_transition.assert_called_once_with(self.ISSUE_URL)
+
+    def test_develop_verification_failure_blocks_transition(self):
+        with (
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.validate_issue_labels", return_value=[]),
+            patch("askcc.cli.validate_issue_readiness", return_value=[]),
+            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
+            patch("askcc.cli.get_runner", return_value=_mock_runner()),
+            patch("askcc.cli._run_project_verification", return_value=_VERIFICATION_FAILED),
+            patch("askcc.cli.transition_issue_to_review") as mock_transition,
+            patch("sys.argv", ["askcc", "develop", "--skip-validation", "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit),
+        ):
+            main()
+
+        mock_transition.assert_not_called()
 
     def test_develop_failure_skips_transition(self):
         with (
@@ -978,6 +1012,96 @@ class TestDevelopTransitionIntegration:
             main()
 
         mock_transition.assert_not_called()
+
+
+class TestDetectVerificationCommands:
+    def test_reads_from_pyproject_toml(self, tmp_path: Path):
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            '[[tool.askcc.verify]]\nname = "tests"\ncmd = "uv run poe test"\n\n'
+            '[[tool.askcc.verify]]\nname = "lint"\ncmd = "uv run poe check"\n'
+        )
+        commands = _detect_verification_commands(tmp_path)
+        assert commands == [
+            ("tests", ["uv", "run", "poe", "test"]),
+            ("lint", ["uv", "run", "poe", "check"]),
+        ]
+
+    def test_reads_from_askcc_toml(self, tmp_path: Path):
+        askcc_toml = tmp_path / ".askcc.toml"
+        askcc_toml.write_text(
+            '[[verify]]\nname = "tests"\ncmd = "npm test"\n\n[[verify]]\nname = "lint"\ncmd = "npm run lint"\n'
+        )
+        commands = _detect_verification_commands(tmp_path)
+        assert commands == [
+            ("tests", ["npm", "test"]),
+            ("lint", ["npm", "run", "lint"]),
+        ]
+
+    def test_pyproject_takes_precedence_over_askcc_toml(self, tmp_path: Path):
+        (tmp_path / "pyproject.toml").write_text('[[tool.askcc.verify]]\nname = "tests"\ncmd = "make test"\n')
+        (tmp_path / ".askcc.toml").write_text('[[verify]]\nname = "tests"\ncmd = "npm test"\n')
+        commands = _detect_verification_commands(tmp_path)
+        assert commands == [("tests", ["make", "test"])]
+
+    def test_returns_empty_when_no_config(self, tmp_path: Path):
+        commands = _detect_verification_commands(tmp_path)
+        assert commands == []
+
+    def test_returns_empty_when_pyproject_has_no_verify_section(self, tmp_path: Path):
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "myapp"\n')
+        commands = _detect_verification_commands(tmp_path)
+        assert commands == []
+
+    def test_skips_entries_missing_required_fields(self, tmp_path: Path):
+        (tmp_path / ".askcc.toml").write_text(
+            '[[verify]]\nname = "tests"\ncmd = "pytest"\n\n[[verify]]\nname = "incomplete"\n'  # missing cmd
+        )
+        commands = _detect_verification_commands(tmp_path)
+        assert commands == [("tests", ["pytest"])]
+
+
+class TestRunProjectVerification:
+    def test_skips_when_no_commands_detected(self, tmp_path: Path):
+        result = _run_project_verification(tmp_path)
+        assert result.passed is True
+        assert result.checks == []
+        assert "skipping" in result.message.lower()
+
+    def test_all_checks_pass(self, tmp_path: Path):
+        (tmp_path / ".askcc.toml").write_text(
+            '[[verify]]\nname = "tests"\ncmd = "pytest"\n\n[[verify]]\nname = "lint"\ncmd = "ruff check"\n'
+        )
+        ok = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        with patch("askcc.functions.subprocess.run", return_value=ok):
+            result = _run_project_verification(tmp_path)
+        assert result.passed is True
+        assert all(c.passed for c in result.checks)
+
+    def test_partial_failure(self, tmp_path: Path):
+        (tmp_path / ".askcc.toml").write_text(
+            '[[verify]]\nname = "tests"\ncmd = "pytest"\n\n[[verify]]\nname = "lint"\ncmd = "ruff check"\n'
+        )
+        ok = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        fail = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="lint error found")
+        with patch("askcc.functions.subprocess.run", side_effect=[ok, fail]):
+            result = _run_project_verification(tmp_path)
+        assert result.passed is False
+        assert result.message == "1/2 checks passed"
+
+    def test_command_not_found(self, tmp_path: Path):
+        (tmp_path / ".askcc.toml").write_text('[[verify]]\nname = "tests"\ncmd = "pytest"\n')
+        with patch("askcc.functions.subprocess.run", side_effect=FileNotFoundError):
+            result = _run_project_verification(tmp_path)
+        assert result.passed is False
+        assert "command not found" in result.checks[0].message
+
+    def test_timeout(self, tmp_path: Path):
+        (tmp_path / ".askcc.toml").write_text('[[verify]]\nname = "tests"\ncmd = "pytest"\n')
+        with patch("askcc.functions.subprocess.run", side_effect=subprocess.TimeoutExpired("cmd", 300)):
+            result = _run_project_verification(tmp_path)
+        assert result.passed is False
+        assert "timed out" in result.checks[0].message
 
 
 class TestLoadPrepareConfig:

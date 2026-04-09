@@ -96,6 +96,44 @@ Edit any file to customize the agent's behavior. User prompt templates **must** 
 
 Override the config directory by setting the `ASKCC_HOME` environment variable (e.g. for testing).
 
+### Post-Develop Verification
+
+After the `develop` command completes successfully, askcc can run verification commands (tests, linting, type checks) before transitioning the issue to `action:review`. This is **optional** — if no verification config is found, the transition proceeds without checks.
+
+Configure verification commands in either of these files (checked in order):
+
+#### `pyproject.toml`
+
+```toml
+[[tool.askcc.verify]]
+name = "tests"
+cmd = "uv run poe test"
+
+[[tool.askcc.verify]]
+name = "lint"
+cmd = "uv run poe check"
+
+[[tool.askcc.verify]]
+name = "typecheck"
+cmd = "uv run poe typecheck"
+```
+
+#### `.askcc.toml`
+
+For non-Python projects or when `pyproject.toml` is not used:
+
+```toml
+[[verify]]
+name = "tests"
+cmd = "npm test"
+
+[[verify]]
+name = "lint"
+cmd = "npm run lint"
+```
+
+Each entry requires a `name` (used in log output) and `cmd` (shell command to run). If any command fails, the issue label stays at `action:develop` and the failure details are logged. Each command has a 5-minute timeout.
+
 ### Examples
 
 Prepare a backlog issue for development:

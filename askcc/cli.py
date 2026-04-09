@@ -11,6 +11,7 @@ from .definitions import AgentAction, AgentConfig, SupportedLanguage
 from .functions import (
     CheckResult,
     _parse_issue_url,
+    _run_project_verification,
     append_usage_to_last_comment,
     bootstrap_templates,
     fetch_github_issue,
@@ -201,8 +202,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
             sys.exit(1)
         issue_url = pr_result.stdout.strip()
         ci_context = (
-            f"Auto-detected PR: {issue_url}\n\n"
-            "No linked issue provided. Use the PR URL above to find CI failures."
+            f"Auto-detected PR: {issue_url}\n\nNo linked issue provided. Use the PR URL above to find CI failures."
         )
         with tempfile.NamedTemporaryFile(mode="w", prefix="askcc_fix-ci_", suffix=".md", delete=False) as f:
             f.write(ci_context)
@@ -264,7 +264,14 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
         transition_issue_to_planning(issue_url)
 
     if action == AgentAction.DEVELOP and return_code == 0:
-        transition_issue_to_review(issue_url)
+        verify_result = _run_project_verification(cwd)
+        if verify_result.passed:
+            transition_issue_to_review(issue_url)
+        else:
+            logger.warning("Post-develop verification failed: %s", verify_result.message)
+            for check in verify_result.checks:
+                status = "PASS" if check.passed else "FAIL"
+                logger.warning("  [%s] %s: %s", status, check.name, check.message)
 
     sys.exit(return_code)
 

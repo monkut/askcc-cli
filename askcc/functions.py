@@ -208,6 +208,118 @@ class CheckResult:
     message: str
 
 
+@dataclass(frozen=True)
+class VerificationResult:
+    passed: bool
+    message: str
+    checks: list[CheckResult]
+
+
+VERIFICATION_TIMEOUT = 300  # 5 minutes per command
+
+
+_POE_TASK_CHECKS: tuple[tuple[str, str, list[str]], ...] = (
+    ("test", "tests", ["uv", "run", "poe", "test"]),
+    ("check", "lint", ["uv", "run", "poe", "check"]),
+    ("typecheck", "typecheck", ["uv", "run", "poe", "typecheck"]),
+)
+
+_DIRECT_TOOL_CHECKS: tuple[tuple[str, str, list[str]], ...] = (
+    ("pytest", "tests", ["uv", "run", "pytest"]),
+    ("ruff", "lint", ["uv", "run", "ruff", "check"]),
+    ("pyright", "typecheck", ["uv", "run", "pyright"]),
+)
+
+
+def _has_poe_task(content: str, task_name: str) -> bool:
+    """Check if a poe task is defined in pyproject.toml content."""
+    if f"[tool.poe.tasks.{task_name}]" in content:
+        return True
+    return re.search(rf"^{task_name}\s*=", content, re.MULTILINE) is not None
+
+
+def _detect_pyproject_commands(content: str) -> list[tuple[str, list[str]]]:
+    """Detect verification commands from pyproject.toml content."""
+    commands: list[tuple[str, list[str]]] = []
+    if "poe.tasks" in content:
+        for task_name, check_name, cmd in _POE_TASK_CHECKS:
+            if _has_poe_task(content, task_name):
+                commands.append((check_name, cmd))
+    else:
+        for tool_name, check_name, cmd in _DIRECT_TOOL_CHECKS:
+            if tool_name in content:
+                commands.append((check_name, cmd))
+    return commands
+
+
+def _detect_verification_commands(cwd: Path) -> list[tuple[str, list[str]]]:
+    """Detect project verification commands based on config files present in cwd.
+
+    Returns a list of (check_name, command_args) tuples.
+    """
+    pyproject = cwd / "pyproject.toml"
+    if pyproject.exists():
+        return _detect_pyproject_commands(pyproject.read_text())
+
+    package_json = cwd / "package.json"
+    if package_json.exists():
+        content = package_json.read_text()
+        commands: list[tuple[str, list[str]]] = []
+        if '"test"' in content:
+            commands.append(("tests", ["npm", "test"]))
+        if '"lint"' in content:
+            commands.append(("lint", ["npm", "run", "lint"]))
+        return commands
+
+    makefile = cwd / "Makefile"
+    if makefile.exists():
+        content = makefile.read_text()
+        commands = []
+        if "test:" in content or "test :" in content:
+            commands.append(("tests", ["make", "test"]))
+        if "lint:" in content or "lint :" in content:
+            commands.append(("lint", ["make", "lint"]))
+        return commands
+
+    return []
+
+
+def _run_project_verification(cwd: Path) -> VerificationResult:
+    """Run detected project verification commands and return aggregate result."""
+    commands = _detect_verification_commands(cwd)
+    if not commands:
+        logger.info("No verification commands detected in %s, skipping verification", cwd)
+        return VerificationResult(passed=True, message="No verification commands detected, skipping", checks=[])
+
+    checks: list[CheckResult] = []
+    for name, cmd in commands:
+        logger.info("Running verification: %s (%s)", name, " ".join(cmd))
+        try:
+            result = subprocess.run(  # noqa: S603
+                cmd,
+                capture_output=True,
+                text=True,
+                check=False,
+                cwd=cwd,
+                timeout=VERIFICATION_TIMEOUT,
+            )
+            if result.returncode == 0:
+                checks.append(CheckResult(name=name, passed=True, message="passed"))
+            else:
+                stderr_snippet = result.stderr.strip()[:200] if result.stderr else result.stdout.strip()[:200]
+                checks.append(CheckResult(name=name, passed=False, message=f"failed: {stderr_snippet}"))
+        except FileNotFoundError:
+            checks.append(CheckResult(name=name, passed=False, message=f"command not found: {cmd[0]}"))
+        except subprocess.TimeoutExpired:
+            checks.append(CheckResult(name=name, passed=False, message=f"timed out after {VERIFICATION_TIMEOUT}s"))
+
+    all_passed = all(c.passed for c in checks)
+    passed_count = sum(1 for c in checks if c.passed)
+    total = len(checks)
+    message = f"{passed_count}/{total} checks passed"
+    return VerificationResult(passed=all_passed, message=message, checks=checks)
+
+
 def _has_acceptance_criteria(body: str) -> bool:
     """Check for an acceptance criteria section with checklist items."""
     match = re.search(r"#{2,}\s+acceptance\s+criteria", body, re.IGNORECASE)

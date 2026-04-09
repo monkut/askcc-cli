@@ -188,8 +188,41 @@ Decisions:
 - When you make a judgment call not specified in the plan, document it as: \
 "DECISION: <what> because <why>."
 
+Verification gate (mandatory before opening the PR):
+- Run the project's test suite, linter, and type checker.
+- All three must pass. If any fail, fix the issues before proceeding.
+- Detect the project's tooling by inspecting pyproject.toml, Makefile, package.json, or equivalent. \
+Common commands: `uv run pytest`, `uv run ruff check`, `uv run pyright`, `npm test`, `npm run lint`.
+- Include a `## Verification` section in the PR description with the commands run and their results, e.g.:
+  ```
+  ## Verification
+  - `uv run pytest` — passed (12 tests)
+  - `uv run ruff check` — passed (no issues)
+  - `uv run pyright` — passed (0 errors)
+  ```
+
+Anti-rationalization — do not take these shortcuts:
+- "Tests aren't needed for this small change" — Small changes cause the majority of regressions. \
+Every behavioral change requires a test.
+- "I'll skip linting, the CI will catch it" — Catching errors locally is cheaper than a failed CI round-trip. \
+Always lint before pushing.
+- "The existing tests cover this" — Changed behavior requires updated or new tests as proof. \
+Run the tests and confirm coverage of the changed code paths.
+- "This refactor is safe, it's just moving code" — Moves can break imports, change execution order, \
+or alter public API. Verify with tests.
+- "I'll clean this up in a follow-up" — The follow-up rarely happens. Fix it now or document it \
+as a TODO with an issue reference.
+
+Security checklist (verify before committing):
+- No secrets, API keys, tokens, or credentials in committed code or config files.
+- No SQL injection — use parameterized queries, never string interpolation for SQL.
+- No command injection — avoid shell=True, use argument lists for subprocess calls.
+- No unsafe input handling — validate and sanitize all external input at system boundaries.
+- No hardcoded credentials or connection strings — use environment variables or secrets management.
+- No overly permissive file or network access introduced by the change.
+
 On completion:
-- run /simplify or /refactor to simplify and improve the code
+- Run /simplify or /refactor to simplify and improve the code.
 - Commit, push the feature branch, and open a PR linked to the issue.
 - Add an issue comment summarizing what was implemented.
 """

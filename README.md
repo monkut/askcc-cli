@@ -30,7 +30,8 @@ uvx --from . --python 3.14 askcc --help
 ## Usage
 
 ```
-askcc [--cwd DIR] {prepare,plan,validate,develop,issue-review,pr-review,explore,diagnose} --github-issue-url URL
+askcc [--cwd DIR] {prepare,plan,validate,develop,issue-review,pr-review,explore,diagnose,fix-ci} --github-issue-url URL
+askcc fix-ci [--cwd DIR] [--github-issue-url URL]
 askcc install [--directory DIR]
 ```
 
@@ -46,6 +47,7 @@ askcc install [--directory DIR]
 | `pr-review` | Review a PR's code against its linked issue's Definition of Done        |
 | `explore`  | Fetch the issue and run Claude in explore mode (investigate and propose solutions) |
 | `diagnose` | Fetch the issue and run Claude in diagnose mode (root cause analysis)    |
+| `fix-ci`   | Identify failing CI checks on the current PR or branch and implement fixes (`--github-issue-url` optional) |
 | `install`  | Install bundled skills to `~/.claude/skills` and/or `~/.openclaw/workspace/skills` |
 
 ### Options
@@ -87,6 +89,8 @@ On first run, askcc creates `~/.askcc/templates/` with default template files:
 | `EXPLORE_USER_PROMPT.md`     | `$issue_content_file`   | User prompt template for exploration   |
 | `DIAGNOSE_SYSTEM_PROMPT.md`  | —                  | System prompt for the diagnose agent   |
 | `DIAGNOSE_USER_PROMPT.md`    | `$issue_content_file`   | User prompt template for diagnosis     |
+| `FIXCI_SYSTEM_PROMPT.md`     | —                  | System prompt for the fix-ci agent     |
+| `FIXCI_USER_PROMPT.md`       | `$issue_content_file`   | User prompt template for CI fixing     |
 
 Edit any file to customize the agent's behavior. User prompt templates **must** contain the `$issue_content_file` variable, which is replaced with the path to a tempfile containing the fetched GitHub issue content at runtime. The tempfile is written to `/tmp` with the naming convention `askcc_{COMMAND}_{OWNER}-{REPO}_{ISSUE#}.md` and is automatically cleaned up after execution. askcc validates required variables on startup and raises an error if one is missing.
 

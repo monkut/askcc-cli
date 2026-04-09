@@ -2,6 +2,7 @@ import argparse
 import logging
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from string import Template
 
@@ -136,6 +137,15 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
     diagnose_parser = subparsers.add_parser("diagnose", help="Run Claude in diagnose mode (root cause analysis).")
     diagnose_parser.add_argument("-g", "--github-issue-url", required=True, help="GitHub issue URL to diagnose.")
 
+    fixci_parser = subparsers.add_parser("fix-ci", help="Fix failing CI checks on the current branch or PR.")
+    fixci_parser.add_argument(
+        "-g",
+        "--github-issue-url",
+        required=False,
+        default=None,
+        help="GitHub issue URL with a linked PR. If omitted, detects the PR from the current branch.",
+    )
+
     install_parser = subparsers.add_parser("install", help="Install bundled skills to the agent workspace.")
     install_parser.add_argument(
         "--directory",
@@ -157,7 +167,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
 
     bootstrap_templates()
 
-    if not args.ignore_labels and args.command != "prepare":
+    if not args.ignore_labels and args.command != "prepare" and args.github_issue_url is not None:
         label_errors = validate_issue_labels(args.github_issue_url)
         if label_errors:
             for error in label_errors:
@@ -176,12 +186,37 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
     issue_url = args.github_issue_url
     cwd = (args.cwd or Path.cwd()).resolve()
     config = load_agent_config(action)
-    issue_content = fetch_github_issue(issue_url)
-    try:
-        prompt, prompt_tempfiles = _build_prompt(action, config, issue_content, issue_url)
-    except ValueError:
-        logger.exception("[%s] Failed to build prompt for '%s'", issue_url, action.value)
-        sys.exit(1)
+
+    # fix-ci: issue URL is optional — auto-detect PR from current branch if not provided
+    if action == AgentAction.FIX_CI and issue_url is None:
+        pr_result = subprocess.run(  # noqa: S603
+            ["gh", "pr", "view", "--json", "url", "-q", ".url"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=cwd,
+        )
+        if pr_result.returncode != 0 or not pr_result.stdout.strip():
+            logger.error("No open PR found for the current branch. Provide --github-issue-url or open a PR first.")
+            sys.exit(1)
+        issue_url = pr_result.stdout.strip()
+        ci_context = (
+            f"Auto-detected PR: {issue_url}\n\n"
+            "No linked issue provided. Use the PR URL above to find CI failures."
+        )
+        with tempfile.NamedTemporaryFile(mode="w", prefix="askcc_fix-ci_", suffix=".md", delete=False) as f:
+            f.write(ci_context)
+            ci_tempfile = Path(f.name)
+        prompt_tempfiles = [ci_tempfile]
+        prompt = Template(config.user_prompt_template).safe_substitute(issue_content_file=str(ci_tempfile))
+        logger.info("[%s] Auto-detected PR, using tempfile: %s", issue_url, ci_tempfile)
+    else:
+        issue_content = fetch_github_issue(issue_url)
+        try:
+            prompt, prompt_tempfiles = _build_prompt(action, config, issue_content, issue_url)
+        except ValueError:
+            logger.exception("[%s] Failed to build prompt for '%s'", issue_url, action.value)
+            sys.exit(1)
     if args.language != SupportedLanguage.ENGLISH:
         prompt += f"\nOutput all comments in {args.language}."
     runner = get_runner(args.runner)

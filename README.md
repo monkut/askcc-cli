@@ -50,6 +50,37 @@ askcc install [--directory DIR]
 | `fix-ci`   | Identify failing CI checks on the current PR or branch and implement fixes (`--github-issue-url` optional) |
 | `install`  | Install bundled skills to `~/.claude/skills` and/or `~/.openclaw/workspace/skills` |
 
+### Recommended Workflow
+
+askcc commands are designed to run sequentially, where each phase produces artifacts (issue sections, labels, project status) that gate and feed the next:
+
+```
+prepare → plan → develop → pr-review
+```
+
+| Phase | Command | Inputs | Outputs |
+|-------|---------|--------|---------|
+| **Define** | `prepare` | Raw backlog issue | Acceptance criteria, dependencies, estimate; adds `action:develop` label |
+| **Plan** | `plan` | Prepared issue with acceptance criteria | Implementation plan, assignee; finalizes issue description |
+| **Build** | `develop` | Planned issue (validated for readiness) | Feature branch, PR linked to issue; swaps label to `action:review` |
+| **Verify** | `pr-review` | Issue + linked PR | Definition of Done review, approve or request changes |
+
+Supporting commands can be used at any point:
+
+| Command | When to use |
+|---------|-------------|
+| `issue-review` | Before `prepare` — review issue quality and suggest improvements |
+| `validate` | Before `develop` — check readiness gates without running the agent |
+| `explore` | Before `plan` — investigate approaches and trade-offs |
+| `diagnose` | Any time — root cause analysis for bug reports |
+| `fix-ci` | After `develop` — fix failing CI checks on the PR branch |
+
+**Gating mechanisms:**
+- `prepare` adds the `action:develop` label; subsequent commands require an `action:` label prefix
+- `develop` runs readiness validation (acceptance criteria, dependencies, assignee, no blocking labels) before starting
+- The `needs:decision` label blocks `develop` until resolved
+- `develop` swaps `action:develop` → `action:review` and moves the project board status on success
+
 ### Options
 
 | Option               | Description                                              |

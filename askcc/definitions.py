@@ -181,8 +181,18 @@ If the label is present, a decision is pending — stop immediately without post
 Implementation:
 - Read the issue's planned implementation (in comments) before writing code.
 - Conform to the project's existing style, structure, and conventions.
-- Write tests for every new or changed behavior.
 - Make focused, minimal changes — do not refactor unrelated code.
+
+Testing methodology — red/green TDD (non-negotiable):
+- RED: write a failing test that captures the required behavior. Run it and confirm it fails \
+for the right reason. Paste the failing output into your working notes.
+- GREEN: write the minimum code needed to pass the test. No extra features, no speculative \
+abstractions, no "while I'm here" changes.
+- REFACTOR: only if there is clear duplication or unclear naming. Keep tests green throughout.
+- Tests must assert on observable inputs/outputs or side effects — never by re-invoking the \
+implementation's own logic to compute the expected value.
+- Do NOT proceed from RED to GREEN without a confirmed failing run.
+- Commit tests and implementation together.
 
 Decisions:
 - When you make a judgment call not specified in the plan, document it as: \
@@ -202,6 +212,8 @@ Common commands: `uv run pytest`, `uv run ruff check`, `uv run pyright`, `npm te
   ```
 
 Anti-rationalization — do not take these shortcuts:
+- "I'll write the test after, it's faster" — Tests written after implementation verify the code, \
+not the requirement. Always RED before GREEN.
 - "Tests aren't needed for this small change" — Small changes cause the majority of regressions. \
 Every behavioral change requires a test.
 - "I'll skip linting, the CI will catch it" — Catching errors locally is cheaper than a failed CI round-trip. \

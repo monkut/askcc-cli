@@ -9,7 +9,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from askcc.cli import main
-from askcc.definitions import AGENT_CONFIGS, AgentAction, AgentConfig, SupportedLanguage
+from askcc.definitions import (
+    AGENT_CONFIGS,
+    DEVELOP_AGENT_PROMPT,
+    AgentAction,
+    AgentConfig,
+    SupportedLanguage,
+)
 from askcc.functions import (
     CheckResult,
     VerificationResult,
@@ -227,6 +233,37 @@ class TestLoadAgentConfig:
 
         with pytest.raises(ValueError, match="missing required variable"):
             load_agent_config(AgentAction.PLAN)
+
+
+class TestDevelopPromptTddContent:
+    def test_includes_red_green_tdd_block(self):
+        assert "Testing methodology — red/green TDD (non-negotiable):" in DEVELOP_AGENT_PROMPT
+
+    def test_includes_red_phase_with_failure_confirmation(self):
+        assert "RED:" in DEVELOP_AGENT_PROMPT
+        assert "confirm it fails" in DEVELOP_AGENT_PROMPT
+
+    def test_includes_green_phase_with_minimum_code(self):
+        assert "GREEN:" in DEVELOP_AGENT_PROMPT
+        assert "minimum code" in DEVELOP_AGENT_PROMPT
+
+    def test_includes_refactor_phase(self):
+        assert "REFACTOR:" in DEVELOP_AGENT_PROMPT
+
+    def test_includes_phase_gate_blocking_red_to_green(self):
+        assert "Do NOT proceed from RED to GREEN without a confirmed failing run." in DEVELOP_AGENT_PROMPT
+
+    def test_includes_behavioral_assertion_rule(self):
+        assert "observable inputs/outputs or side effects" in DEVELOP_AGENT_PROMPT
+
+    def test_requires_committing_tests_with_implementation(self):
+        assert "Commit tests and implementation together." in DEVELOP_AGENT_PROMPT
+
+    def test_anti_rationalization_includes_tests_after_entry(self):
+        assert "I'll write the test after, it's faster" in DEVELOP_AGENT_PROMPT
+
+    def test_removes_legacy_write_tests_line(self):
+        assert "Write tests for every new or changed behavior" not in DEVELOP_AGENT_PROMPT
 
 
 class TestWritePromptContent:

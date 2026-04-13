@@ -18,6 +18,7 @@ from .functions import (
     fetch_pr_content,
     install_skills,
     load_agent_config,
+    transition_issue_to_development,
     transition_issue_to_planning,
     transition_issue_to_review,
     validate_issue_labels,
@@ -262,6 +263,9 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
 
     if action == AgentAction.PREPARE and return_code == 0:
         transition_issue_to_planning(issue_url)
+
+    if action == AgentAction.PLAN and return_code == 0:
+        transition_issue_to_development(issue_url)
 
     if action == AgentAction.DEVELOP and return_code == 0:
         verify_result = _run_project_verification(cwd)

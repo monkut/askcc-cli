@@ -17,7 +17,9 @@ from .settings import (
     BLOCKING_LABELS,
     DEVELOP_LABEL,
     ENABLE_ISSUE_LABEL_PREFIX_VALIDATION,
+    PLAN_LABEL,
     PLANNING_STATUS_OPTIONS,
+    READY_STATUS_OPTIONS,
     REQUIRED_ISSUE_LABEL_PREFIXES,
     REVIEW_LABEL,
     REVIEW_STATUS_OPTIONS,
@@ -727,6 +729,22 @@ def transition_issue_to_planning(github_issue_url: str) -> None:
         issue_number,
         status_options=PLANNING_STATUS_OPTIONS,
     )
+
+
+def transition_issue_to_development(github_issue_url: str) -> None:
+    """Transition issue labels and project state after successful planning.
+
+    Swaps action:plan -> action:develop and moves project status to ready/todo.
+    If action:plan is not present, action:develop is still added (the remove
+    step warns but does not raise).
+    All failures are logged as warnings, never raised.
+    """
+    gh = _require_gh_cli()
+    owner, repo, issue_number = _parse_issue_url(github_issue_url)
+    repo_nwo = f"{owner}/{repo}"
+
+    _swap_issue_labels(gh, repo_nwo, issue_number, remove=PLAN_LABEL, add=DEVELOP_LABEL)
+    _transition_project_fields(gh, owner, repo, issue_number, status_options=READY_STATUS_OPTIONS)
 
 
 def transition_issue_to_review(github_issue_url: str) -> None:

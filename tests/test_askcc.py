@@ -35,6 +35,7 @@ from askcc.functions import (
     install_skills,
     load_agent_config,
     load_template,
+    transition_issue_to_development,
     transition_issue_to_planning,
     transition_issue_to_review,
     validate_issue_readiness,
@@ -1199,6 +1200,101 @@ class TestTransitionIssueToPlanningIntegration:
             42,
             status_options=("planning",),
         )
+
+
+class TestTransitionIssueToDevelopmentIntegration:
+    ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/42"
+
+    def test_calls_swap_labels_and_project_transition(self):
+        with (
+            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
+            patch("askcc.functions._swap_issue_labels") as mock_swap,
+            patch("askcc.functions._transition_project_fields") as mock_project,
+        ):
+            transition_issue_to_development(self.ISSUE_URL)
+
+        mock_swap.assert_called_once_with(
+            "/usr/bin/gh",
+            "monkut/askcc-cli",
+            42,
+            remove="action:plan",
+            add="action:develop",
+        )
+        mock_project.assert_called_once_with(
+            "/usr/bin/gh",
+            "monkut",
+            "askcc-cli",
+            42,
+            status_options=("ready", "todo"),
+        )
+
+    def test_handles_no_project_cleanly(self):
+        empty_items = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout=json.dumps({"data": {"repository": {"issue": {"projectItems": {"nodes": []}}}}}),
+            stderr="",
+        )
+        ok = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        with (
+            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
+            patch("askcc.functions.subprocess.run", side_effect=[ok, ok, empty_items]),
+        ):
+            transition_issue_to_development(self.ISSUE_URL)
+
+
+class TestPlanCommand:
+    ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/1"
+
+    def test_plan_success_triggers_development_transition(self):
+        with (
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.validate_issue_labels", return_value=[]),
+            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
+            patch("askcc.cli.get_runner", return_value=_mock_runner()),
+            patch("askcc.cli.transition_issue_to_development") as mock_transition,
+            patch("sys.argv", ["askcc", "plan", "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit),
+        ):
+            main()
+
+        mock_transition.assert_called_once_with(self.ISSUE_URL)
+
+    def test_plan_success_invokes_project_transition(self):
+        with (
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.validate_issue_labels", return_value=[]),
+            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
+            patch("askcc.cli.get_runner", return_value=_mock_runner()),
+            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
+            patch("askcc.functions._swap_issue_labels"),
+            patch("askcc.functions._transition_project_fields") as mock_project,
+            patch("sys.argv", ["askcc", "plan", "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit),
+        ):
+            main()
+
+        mock_project.assert_called_once_with(
+            "/usr/bin/gh",
+            "monkut",
+            "askcc-cli",
+            1,
+            status_options=("ready", "todo"),
+        )
+
+    def test_plan_failure_skips_transition(self):
+        with (
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.validate_issue_labels", return_value=[]),
+            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
+            patch("askcc.cli.get_runner", return_value=_mock_runner(1)),
+            patch("askcc.cli.transition_issue_to_development") as mock_transition,
+            patch("sys.argv", ["askcc", "plan", "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit),
+        ):
+            main()
+
+        mock_transition.assert_not_called()
 
 
 class TestPrepareCommand:

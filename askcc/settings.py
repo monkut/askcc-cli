@@ -15,11 +15,15 @@ ENABLE_ISSUE_LABEL_PREFIX_VALIDATION: bool = os.getenv("ENABLE_ISSUE_LABEL_PREFI
 REQUIRED_ISSUE_LABEL_PREFIXES: tuple[str, ...] = ("action:",)
 
 # Label transition
+PLAN_LABEL = "action:plan"
 DEVELOP_LABEL = "action:develop"
 REVIEW_LABEL = "action:review"
 
 # Prepare transition
 PLANNING_STATUS_OPTIONS: tuple[str, ...] = ("planning",)
+
+# Plan transition (post-plan, ready for development)
+READY_STATUS_OPTIONS: tuple[str, ...] = ("ready", "todo")
 
 # Project field transition
 REVIEW_STATUS_OPTIONS: tuple[str, ...] = ("in-internal-review", "in-review")

@@ -7,6 +7,8 @@ import subprocess
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
+from .settings import CLAUDE_ENV_DISABLE_ADAPTIVE_THINKING, CLAUDE_ENV_DISABLE_THINKING, CLAUDE_ENV_MAX_THINKING_TOKENS
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -73,11 +75,11 @@ class ClaudeRunner(Runner):
         env.pop("CLAUDECODE", None)
 
         if max_thinking_tokens is not None:
-            env["MAX_THINKING_TOKENS"] = str(max_thinking_tokens)
+            env[CLAUDE_ENV_MAX_THINKING_TOKENS] = str(max_thinking_tokens)
         if disable_thinking:
-            env["CLAUDE_CODE_DISABLE_THINKING"] = "1"
+            env[CLAUDE_ENV_DISABLE_THINKING] = "1"
         if disable_adaptive_thinking:
-            env["CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING"] = "1"
+            env[CLAUDE_ENV_DISABLE_ADAPTIVE_THINKING] = "1"
 
         logger.info("[%s] Requesting '%s' from Claude Code ...", issue_url, config.action_name)
         logger.info("[%s] Working directory: %s", issue_url, cwd)

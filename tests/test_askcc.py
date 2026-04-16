@@ -44,7 +44,13 @@ from askcc.functions import (
     write_prompt_content,
 )
 from askcc.runners import ClaudeRunner, get_runner
-from askcc.settings import DEFAULT_MAX_THINKING_TOKENS, _resolve_effort_level
+from askcc.settings import (
+    CLAUDE_ENV_DISABLE_ADAPTIVE_THINKING,
+    CLAUDE_ENV_DISABLE_THINKING,
+    CLAUDE_ENV_MAX_THINKING_TOKENS,
+    DEFAULT_MAX_THINKING_TOKENS,
+    _resolve_effort_level,
+)
 
 
 def _mock_runner(return_code: int = 0, usage: dict | None = None) -> MagicMock:
@@ -1716,7 +1722,7 @@ class TestClaudeRunnerThinkingOptions:
                 max_thinking_tokens=50000,
             )
         env = mock_run.call_args[1]["env"]
-        assert env["MAX_THINKING_TOKENS"] == "50000"
+        assert env[CLAUDE_ENV_MAX_THINKING_TOKENS] == "50000"
 
     def test_disable_thinking_in_env(self, runner: ClaudeRunner, agent_config: AgentConfig):
         mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="{}", stderr="")
@@ -1729,7 +1735,7 @@ class TestClaudeRunnerThinkingOptions:
                 disable_thinking=True,
             )
         env = mock_run.call_args[1]["env"]
-        assert env["CLAUDE_CODE_DISABLE_THINKING"] == "1"
+        assert env[CLAUDE_ENV_DISABLE_THINKING] == "1"
 
     def test_disable_adaptive_thinking_in_env(self, runner: ClaudeRunner, agent_config: AgentConfig):
         mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="{}", stderr="")
@@ -1742,14 +1748,14 @@ class TestClaudeRunnerThinkingOptions:
                 disable_adaptive_thinking=True,
             )
         env = mock_run.call_args[1]["env"]
-        assert env["CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING"] == "1"
+        assert env[CLAUDE_ENV_DISABLE_ADAPTIVE_THINKING] == "1"
 
     def test_no_thinking_env_when_defaults(
         self, runner: ClaudeRunner, agent_config: AgentConfig, monkeypatch: pytest.MonkeyPatch
     ):
-        monkeypatch.delenv("CLAUDE_CODE_DISABLE_THINKING", raising=False)
-        monkeypatch.delenv("CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING", raising=False)
-        monkeypatch.delenv("MAX_THINKING_TOKENS", raising=False)
+        monkeypatch.delenv(CLAUDE_ENV_DISABLE_THINKING, raising=False)
+        monkeypatch.delenv(CLAUDE_ENV_DISABLE_ADAPTIVE_THINKING, raising=False)
+        monkeypatch.delenv(CLAUDE_ENV_MAX_THINKING_TOKENS, raising=False)
         mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="{}", stderr="")
         with patch("askcc.runners.subprocess.run", return_value=mock_result) as mock_run:
             runner.run(
@@ -1761,8 +1767,8 @@ class TestClaudeRunnerThinkingOptions:
         cmd = mock_run.call_args[0][0]
         env = mock_run.call_args[1]["env"]
         assert "--effort" not in cmd
-        assert "CLAUDE_CODE_DISABLE_THINKING" not in env
-        assert "CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING" not in env
+        assert CLAUDE_ENV_DISABLE_THINKING not in env
+        assert CLAUDE_ENV_DISABLE_ADAPTIVE_THINKING not in env
 
     def test_effort_none_not_appended(self, runner: ClaudeRunner, agent_config: AgentConfig):
         mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="{}", stderr="")
@@ -1788,4 +1794,4 @@ class TestClaudeRunnerThinkingOptions:
                 disable_thinking=False,
             )
         env = mock_run.call_args[1]["env"]
-        assert "CLAUDE_CODE_DISABLE_THINKING" not in env
+        assert CLAUDE_ENV_DISABLE_THINKING not in env

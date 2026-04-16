@@ -53,10 +53,9 @@ ASKCC_CLAUDE_EFFORT_LEVEL: str | None = _resolve_effort_level()
 
 DEFAULT_MAX_THINKING_TOKENS = 21000  # ~5% of Max5 plan daily token budget (~422K tokens/day)
 
+_raw_max_thinking = os.getenv("ASKCC_CLAUDE_MAX_THINKING_TOKENS", "")
 ASKCC_CLAUDE_MAX_THINKING_TOKENS: int = (
-    int(os.environ["ASKCC_CLAUDE_MAX_THINKING_TOKENS"])
-    if os.getenv("ASKCC_CLAUDE_MAX_THINKING_TOKENS", "").isdigit()
-    else DEFAULT_MAX_THINKING_TOKENS
+    int(_raw_max_thinking) if _raw_max_thinking.isdigit() else DEFAULT_MAX_THINKING_TOKENS
 )
 
 ASKCC_CLAUDE_DISABLE_THINKING: bool = os.getenv("ASKCC_CLAUDE_DISABLE_THINKING", "").lower() in ("1", "true")
@@ -64,6 +63,11 @@ ASKCC_CLAUDE_DISABLE_THINKING: bool = os.getenv("ASKCC_CLAUDE_DISABLE_THINKING",
 ASKCC_CLAUDE_DISABLE_ADAPTIVE_THINKING: bool = os.getenv(
     "ASKCC_CLAUDE_DISABLE_ADAPTIVE_THINKING", "true"
 ).lower() not in ("0", "false")
+
+# Claude Code subprocess env var names
+CLAUDE_ENV_MAX_THINKING_TOKENS = "MAX_THINKING_TOKENS"
+CLAUDE_ENV_DISABLE_THINKING = "CLAUDE_CODE_DISABLE_THINKING"
+CLAUDE_ENV_DISABLE_ADAPTIVE_THINKING = "CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING"
 
 ASKCC_HOME: Path = Path(os.getenv("ASKCC_HOME") or str(Path.home() / ".askcc")).expanduser().resolve()
 TEMPLATES_DIR: Path = ASKCC_HOME / "templates"

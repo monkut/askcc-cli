@@ -26,7 +26,7 @@ from .functions import (
     write_prompt_content,
 )
 from .runners import DEFAULT_RUNNER, RUNNER_REGISTRY, get_runner
-from .settings import VALID_EFFORT_LEVELS, configure_logging
+from .settings import EffortLevel, configure_logging
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +107,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
     )
     parser.add_argument(
         "--effort",
-        choices=VALID_EFFORT_LEVELS,
+        choices=EffortLevel,
         default=settings.ASKCC_CLAUDE_EFFORT_LEVEL,
         help=f"Claude thinking effort level (default: {settings.ASKCC_CLAUDE_EFFORT_LEVEL}). "
         "Env: ASKCC_CLAUDE_EFFORT_LEVEL.",

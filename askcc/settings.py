@@ -1,3 +1,4 @@
+import enum
 import logging
 import os
 import sys
@@ -31,25 +32,35 @@ READY_STATUS_OPTIONS: tuple[str, ...] = ("ready", "todo")
 REVIEW_STATUS_OPTIONS: tuple[str, ...] = ("in-internal-review", "in-review")
 
 # -- Claude thinking/reasoning controls --
-VALID_EFFORT_LEVELS: tuple[str, ...] = ("low", "medium", "high", "max")
 
 
-def _resolve_effort_level() -> str | None:
+class EffortLevel(enum.StrEnum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    MAX = "max"
+
+
+DEFAULT_EFFORT_LEVEL = EffortLevel.MAX
+
+
+def _resolve_effort_level() -> EffortLevel:
     """Resolve ASKCC_CLAUDE_EFFORT_LEVEL, warning on invalid values."""
     raw = os.getenv("ASKCC_CLAUDE_EFFORT_LEVEL") or None
     if raw is None:
-        return None
-    if raw not in VALID_EFFORT_LEVELS:
+        return DEFAULT_EFFORT_LEVEL
+    try:
+        return EffortLevel(raw)
+    except ValueError:
         logger.warning(
             "Invalid ASKCC_CLAUDE_EFFORT_LEVEL=%r (valid: %s). Ignoring.",
             raw,
-            ", ".join(VALID_EFFORT_LEVELS),
+            ", ".join(EffortLevel),
         )
-        return None
-    return raw
+        return DEFAULT_EFFORT_LEVEL
 
 
-ASKCC_CLAUDE_EFFORT_LEVEL: str | None = _resolve_effort_level()
+ASKCC_CLAUDE_EFFORT_LEVEL: EffortLevel = _resolve_effort_level()
 
 DEFAULT_MAX_THINKING_TOKENS = 21000  # ~5% of Max5 plan daily token budget (~422K tokens/day)
 

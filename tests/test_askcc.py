@@ -48,6 +48,7 @@ from askcc.settings import (
     CLAUDE_ENV_DISABLE_ADAPTIVE_THINKING,
     CLAUDE_ENV_DISABLE_THINKING,
     CLAUDE_ENV_MAX_THINKING_TOKENS,
+    DEFAULT_EFFORT_LEVEL,
     DEFAULT_MAX_THINKING_TOKENS,
     _resolve_effort_level,
 )
@@ -1562,15 +1563,15 @@ class TestThinkingSettings:
         result = os.getenv("ASKCC_CLAUDE_EFFORT_LEVEL") or None
         assert result == "high"
 
-    def test_effort_level_empty_string_is_none(self, monkeypatch: pytest.MonkeyPatch):
+    def test_effort_level_empty_string_uses_default(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("ASKCC_CLAUDE_EFFORT_LEVEL", "")
-        result = os.getenv("ASKCC_CLAUDE_EFFORT_LEVEL") or None
-        assert result is None
+        result = _resolve_effort_level()
+        assert result == DEFAULT_EFFORT_LEVEL
 
-    def test_effort_level_unset_is_none(self, monkeypatch: pytest.MonkeyPatch):
+    def test_effort_level_unset_uses_default(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.delenv("ASKCC_CLAUDE_EFFORT_LEVEL", raising=False)
-        result = os.getenv("ASKCC_CLAUDE_EFFORT_LEVEL") or None
-        assert result is None
+        result = _resolve_effort_level()
+        assert result == DEFAULT_EFFORT_LEVEL
 
     def test_invalid_effort_level_logged_and_ignored(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
@@ -1578,7 +1579,7 @@ class TestThinkingSettings:
         monkeypatch.setenv("ASKCC_CLAUDE_EFFORT_LEVEL", "turbo")
         with caplog.at_level("WARNING", logger="askcc.settings"):
             result = _resolve_effort_level()
-        assert result is None
+        assert result == DEFAULT_EFFORT_LEVEL
         assert "Invalid ASKCC_CLAUDE_EFFORT_LEVEL" in caplog.text
 
     def test_max_thinking_tokens_from_env(self, monkeypatch: pytest.MonkeyPatch):

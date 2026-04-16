@@ -34,33 +34,33 @@ REVIEW_STATUS_OPTIONS: tuple[str, ...] = ("in-internal-review", "in-review")
 # -- Claude thinking/reasoning controls --
 
 
-class EffortLevel(enum.StrEnum):
+class VALID_EFFORT_LEVELS(enum.StrEnum):  # noqa: N801
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
     MAX = "max"
 
 
-DEFAULT_EFFORT_LEVEL = EffortLevel.MAX
+DEFAULT_EFFORT_LEVEL = VALID_EFFORT_LEVELS.MAX
 
 
-def _resolve_effort_level() -> EffortLevel:
+def _resolve_effort_level() -> VALID_EFFORT_LEVELS:
     """Resolve ASKCC_CLAUDE_EFFORT_LEVEL, warning on invalid values."""
     raw = os.getenv("ASKCC_CLAUDE_EFFORT_LEVEL") or None
     if raw is None:
         return DEFAULT_EFFORT_LEVEL
     try:
-        return EffortLevel(raw)
+        return VALID_EFFORT_LEVELS(raw)
     except ValueError:
         logger.warning(
             "Invalid ASKCC_CLAUDE_EFFORT_LEVEL=%r (valid: %s). Ignoring.",
             raw,
-            ", ".join(EffortLevel),
+            ", ".join(VALID_EFFORT_LEVELS),
         )
         return DEFAULT_EFFORT_LEVEL
 
 
-ASKCC_CLAUDE_EFFORT_LEVEL: EffortLevel = _resolve_effort_level()
+ASKCC_CLAUDE_EFFORT_LEVEL: VALID_EFFORT_LEVELS = _resolve_effort_level()
 
 DEFAULT_MAX_THINKING_TOKENS = 21000  # ~5% of Max5 plan daily token budget (~422K tokens/day)
 

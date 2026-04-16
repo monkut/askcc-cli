@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from string import Template
 
-from . import __version__
+from . import __version__, settings
 from .definitions import AgentAction, AgentConfig, SupportedLanguage
 from .functions import (
     CheckResult,
@@ -26,7 +26,7 @@ from .functions import (
     write_prompt_content,
 )
 from .runners import DEFAULT_RUNNER, RUNNER_REGISTRY, get_runner
-from .settings import configure_logging
+from .settings import VALID_EFFORT_LEVELS, configure_logging
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +104,35 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
         choices=tuple(RUNNER_REGISTRY),
         default=DEFAULT_RUNNER,
         help=f"Runner to execute the task (default: {DEFAULT_RUNNER}).",
+    )
+    parser.add_argument(
+        "--effort",
+        choices=VALID_EFFORT_LEVELS,
+        default=settings.ASKCC_CLAUDE_EFFORT_LEVEL,
+        help=f"Claude thinking effort level (default: {settings.ASKCC_CLAUDE_EFFORT_LEVEL}). "
+        "Env: ASKCC_CLAUDE_EFFORT_LEVEL.",
+    )
+    parser.add_argument(
+        "--max-thinking-tokens",
+        type=int,
+        default=settings.ASKCC_CLAUDE_MAX_THINKING_TOKENS,
+        help=f"Thinking token budget (default: {settings.ASKCC_CLAUDE_MAX_THINKING_TOKENS}). "
+        "Env: ASKCC_CLAUDE_MAX_THINKING_TOKENS.",
+    )
+    parser.add_argument(
+        "--disable-thinking",
+        action="store_true",
+        default=settings.ASKCC_CLAUDE_DISABLE_THINKING,
+        help=f"Force-disable extended thinking (default: {settings.ASKCC_CLAUDE_DISABLE_THINKING}). "
+        "Env: ASKCC_CLAUDE_DISABLE_THINKING.",
+    )
+    parser.add_argument(
+        "--disable-adaptive-thinking",
+        action=argparse.BooleanOptionalAction,
+        default=settings.ASKCC_CLAUDE_DISABLE_ADAPTIVE_THINKING,
+        help=f"Disable adaptive reasoning (Opus 4.6, Sonnet 4.6) "
+        f"(default: {settings.ASKCC_CLAUDE_DISABLE_ADAPTIVE_THINKING}). "
+        "Env: ASKCC_CLAUDE_DISABLE_ADAPTIVE_THINKING.",
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -222,7 +251,16 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
         prompt += f"\nOutput all comments in {args.language}."
     runner = get_runner(args.runner)
     try:
-        return_code, usage = runner.run(prompt, config=config, issue_url=issue_url, cwd=cwd)
+        return_code, usage = runner.run(
+            prompt,
+            config=config,
+            issue_url=issue_url,
+            cwd=cwd,
+            effort_level=args.effort,
+            max_thinking_tokens=args.max_thinking_tokens,
+            disable_thinking=args.disable_thinking,
+            disable_adaptive_thinking=args.disable_adaptive_thinking,
+        )
     finally:
         # Clean up /tmp files created by _build_prompt (not user templates)
         for f in prompt_tempfiles:

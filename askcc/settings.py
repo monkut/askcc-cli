@@ -1,8 +1,11 @@
+import enum
 import logging
 import os
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_LOG_LEVEL = "INFO"
 LOG_LEVEL = os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
@@ -27,6 +30,57 @@ READY_STATUS_OPTIONS: tuple[str, ...] = ("ready", "todo")
 
 # Project field transition
 REVIEW_STATUS_OPTIONS: tuple[str, ...] = ("in-internal-review", "in-review")
+
+# -- Claude thinking/reasoning controls --
+# NOTE: VALID_EFFORT_LEVELS lives here (not definitions.py) to avoid a circular import;
+# definitions.py already imports from settings.py.
+
+
+class VALID_EFFORT_LEVELS(enum.StrEnum):  # noqa: N801
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    MAX = "max"
+
+
+DEFAULT_EFFORT_LEVEL = VALID_EFFORT_LEVELS.MAX
+
+
+def _resolve_effort_level() -> VALID_EFFORT_LEVELS:
+    """Resolve ASKCC_CLAUDE_EFFORT_LEVEL, warning on invalid values."""
+    raw = os.getenv("ASKCC_CLAUDE_EFFORT_LEVEL") or None
+    if raw is None:
+        return DEFAULT_EFFORT_LEVEL
+    try:
+        return VALID_EFFORT_LEVELS(raw)
+    except ValueError:
+        logger.warning(
+            "Invalid ASKCC_CLAUDE_EFFORT_LEVEL=%r (valid: %s). Ignoring.",
+            raw,
+            ", ".join(VALID_EFFORT_LEVELS),
+        )
+        return DEFAULT_EFFORT_LEVEL
+
+
+ASKCC_CLAUDE_EFFORT_LEVEL: VALID_EFFORT_LEVELS = _resolve_effort_level()
+
+DEFAULT_MAX_THINKING_TOKENS = 21000  # ~5% of Max5 plan daily token budget (~422K tokens/day)
+
+_raw_max_thinking = os.getenv("ASKCC_CLAUDE_MAX_THINKING_TOKENS", "")
+ASKCC_CLAUDE_MAX_THINKING_TOKENS: int = (
+    int(_raw_max_thinking) if _raw_max_thinking.isdigit() else DEFAULT_MAX_THINKING_TOKENS
+)
+
+ASKCC_CLAUDE_DISABLE_THINKING: bool = os.getenv("ASKCC_CLAUDE_DISABLE_THINKING", "").lower() in ("1", "true")
+
+ASKCC_CLAUDE_DISABLE_ADAPTIVE_THINKING: bool = os.getenv(
+    "ASKCC_CLAUDE_DISABLE_ADAPTIVE_THINKING", "true"
+).lower() not in ("0", "false")
+
+# Claude Code subprocess env var names
+CLAUDE_ENV_MAX_THINKING_TOKENS = "MAX_THINKING_TOKENS"
+CLAUDE_ENV_DISABLE_THINKING = "CLAUDE_CODE_DISABLE_THINKING"
+CLAUDE_ENV_DISABLE_ADAPTIVE_THINKING = "CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING"
 
 ASKCC_HOME: Path = Path(os.getenv("ASKCC_HOME") or str(Path.home() / ".askcc")).expanduser().resolve()
 TEMPLATES_DIR: Path = ASKCC_HOME / "templates"

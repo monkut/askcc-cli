@@ -7,6 +7,8 @@ import subprocess
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
+from .settings import CLAUDE_ENV_DISABLE_ADAPTIVE_THINKING, CLAUDE_ENV_DISABLE_THINKING, CLAUDE_ENV_MAX_THINKING_TOKENS
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -28,6 +30,10 @@ class Runner(ABC):
         *,
         issue_url: str,
         cwd: Path,
+        effort_level: str | None = None,
+        max_thinking_tokens: int | None = None,
+        disable_thinking: bool = False,
+        disable_adaptive_thinking: bool = False,
     ) -> tuple[int, dict | None]:
         """Execute a prompt and return (exit_code, usage_dict_or_none)."""
 
@@ -42,6 +48,10 @@ class ClaudeRunner(Runner):
         *,
         issue_url: str,
         cwd: Path,
+        effort_level: str | None = None,
+        max_thinking_tokens: int | None = None,
+        disable_thinking: bool = False,
+        disable_adaptive_thinking: bool = False,
     ) -> tuple[int, dict | None]:
         agent_definition = {config.action_name: {"description": config.description, "prompt": config.system_prompt}}
 
@@ -57,9 +67,19 @@ class ClaudeRunner(Runner):
             json.dumps(agent_definition),
         ]
 
+        if effort_level:
+            cmd.extend(["--effort", effort_level])
+
         # Remove CLAUDECODE env var so the child claude process doesn't think it's nested inside Claude Code
         env = os.environ.copy()
         env.pop("CLAUDECODE", None)
+
+        if max_thinking_tokens is not None:
+            env[CLAUDE_ENV_MAX_THINKING_TOKENS] = str(max_thinking_tokens)
+        if disable_thinking:
+            env[CLAUDE_ENV_DISABLE_THINKING] = "1"
+        if disable_adaptive_thinking:
+            env[CLAUDE_ENV_DISABLE_ADAPTIVE_THINKING] = "1"
 
         logger.info("[%s] Requesting '%s' from Claude Code ...", issue_url, config.action_name)
         logger.info("[%s] Working directory: %s", issue_url, cwd)

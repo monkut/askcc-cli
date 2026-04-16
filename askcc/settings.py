@@ -4,6 +4,8 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
+
 DEFAULT_LOG_LEVEL = "INFO"
 LOG_LEVEL = os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
 
@@ -27,6 +29,41 @@ READY_STATUS_OPTIONS: tuple[str, ...] = ("ready", "todo")
 
 # Project field transition
 REVIEW_STATUS_OPTIONS: tuple[str, ...] = ("in-internal-review", "in-review")
+
+# -- Claude thinking/reasoning controls --
+VALID_EFFORT_LEVELS: tuple[str, ...] = ("low", "medium", "high", "max")
+
+
+def _resolve_effort_level() -> str | None:
+    """Resolve ASKCC_CLAUDE_EFFORT_LEVEL, warning on invalid values."""
+    raw = os.getenv("ASKCC_CLAUDE_EFFORT_LEVEL") or None
+    if raw is None:
+        return None
+    if raw not in VALID_EFFORT_LEVELS:
+        logger.warning(
+            "Invalid ASKCC_CLAUDE_EFFORT_LEVEL=%r (valid: %s). Ignoring.",
+            raw,
+            ", ".join(VALID_EFFORT_LEVELS),
+        )
+        return None
+    return raw
+
+
+ASKCC_CLAUDE_EFFORT_LEVEL: str | None = _resolve_effort_level()
+
+DEFAULT_MAX_THINKING_TOKENS = 21000  # ~5% of Max5 plan daily token budget (~422K tokens/day)
+
+ASKCC_CLAUDE_MAX_THINKING_TOKENS: int = (
+    int(os.environ["ASKCC_CLAUDE_MAX_THINKING_TOKENS"])
+    if os.getenv("ASKCC_CLAUDE_MAX_THINKING_TOKENS", "").isdigit()
+    else DEFAULT_MAX_THINKING_TOKENS
+)
+
+ASKCC_CLAUDE_DISABLE_THINKING: bool = os.getenv("ASKCC_CLAUDE_DISABLE_THINKING", "").lower() in ("1", "true")
+
+ASKCC_CLAUDE_DISABLE_ADAPTIVE_THINKING: bool = os.getenv(
+    "ASKCC_CLAUDE_DISABLE_ADAPTIVE_THINKING", "true"
+).lower() not in ("0", "false")
 
 ASKCC_HOME: Path = Path(os.getenv("ASKCC_HOME") or str(Path.home() / ".askcc")).expanduser().resolve()
 TEMPLATES_DIR: Path = ASKCC_HOME / "templates"

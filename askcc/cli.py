@@ -109,26 +109,30 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
         "--effort",
         choices=VALID_EFFORT_LEVELS,
         default=settings.ASKCC_CLAUDE_EFFORT_LEVEL,
-        help="Claude thinking effort level. Env default: ASKCC_CLAUDE_EFFORT_LEVEL.",
+        help=f"Claude thinking effort level (default: {settings.ASKCC_CLAUDE_EFFORT_LEVEL}). "
+        "Env: ASKCC_CLAUDE_EFFORT_LEVEL.",
     )
     parser.add_argument(
         "--max-thinking-tokens",
         type=int,
         default=settings.ASKCC_CLAUDE_MAX_THINKING_TOKENS,
-        help="Thinking token budget (default: 21000). Env default: ASKCC_CLAUDE_MAX_THINKING_TOKENS.",
+        help=f"Thinking token budget (default: {settings.ASKCC_CLAUDE_MAX_THINKING_TOKENS}). "
+        "Env: ASKCC_CLAUDE_MAX_THINKING_TOKENS.",
     )
     parser.add_argument(
         "--disable-thinking",
         action="store_true",
         default=settings.ASKCC_CLAUDE_DISABLE_THINKING,
-        help="Force-disable extended thinking. Env default: ASKCC_CLAUDE_DISABLE_THINKING.",
+        help=f"Force-disable extended thinking (default: {settings.ASKCC_CLAUDE_DISABLE_THINKING}). "
+        "Env: ASKCC_CLAUDE_DISABLE_THINKING.",
     )
     parser.add_argument(
         "--disable-adaptive-thinking",
         action=argparse.BooleanOptionalAction,
         default=settings.ASKCC_CLAUDE_DISABLE_ADAPTIVE_THINKING,
-        help="Disable adaptive reasoning (Opus 4.6, Sonnet 4.6); default: true. "
-        "Env default: ASKCC_CLAUDE_DISABLE_ADAPTIVE_THINKING.",
+        help=f"Disable adaptive reasoning (Opus 4.6, Sonnet 4.6) "
+        f"(default: {settings.ASKCC_CLAUDE_DISABLE_ADAPTIVE_THINKING}). "
+        "Env: ASKCC_CLAUDE_DISABLE_ADAPTIVE_THINKING.",
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)

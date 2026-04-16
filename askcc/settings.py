@@ -32,6 +32,8 @@ READY_STATUS_OPTIONS: tuple[str, ...] = ("ready", "todo")
 REVIEW_STATUS_OPTIONS: tuple[str, ...] = ("in-internal-review", "in-review")
 
 # -- Claude thinking/reasoning controls --
+# NOTE: VALID_EFFORT_LEVELS lives here (not definitions.py) to avoid a circular import;
+# definitions.py already imports from settings.py.
 
 
 class VALID_EFFORT_LEVELS(enum.StrEnum):  # noqa: N801

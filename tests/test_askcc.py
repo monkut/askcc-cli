@@ -50,6 +50,7 @@ from askcc.settings import (
     CLAUDE_ENV_MAX_THINKING_TOKENS,
     DEFAULT_EFFORT_LEVEL,
     DEFAULT_MAX_THINKING_TOKENS,
+    VALID_EFFORT_LEVELS,
     _resolve_effort_level,
 )
 
@@ -1581,6 +1582,18 @@ class TestThinkingSettings:
             result = _resolve_effort_level()
         assert result == DEFAULT_EFFORT_LEVEL
         assert "Invalid ASKCC_CLAUDE_EFFORT_LEVEL" in caplog.text
+
+    def test_xhigh_effort_level_resolves_without_warning(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ):
+        monkeypatch.setenv("ASKCC_CLAUDE_EFFORT_LEVEL", "xhigh")
+        with caplog.at_level("WARNING", logger="askcc.settings"):
+            result = _resolve_effort_level()
+        assert result == VALID_EFFORT_LEVELS.XHIGH
+        assert "Invalid ASKCC_CLAUDE_EFFORT_LEVEL" not in caplog.text
+
+    def test_default_effort_level_is_xhigh(self):
+        assert DEFAULT_EFFORT_LEVEL == VALID_EFFORT_LEVELS.XHIGH
 
     def test_max_thinking_tokens_from_env(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("ASKCC_CLAUDE_MAX_THINKING_TOKENS", "50000")

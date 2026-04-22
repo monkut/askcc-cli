@@ -40,10 +40,11 @@ class VALID_EFFORT_LEVELS(enum.StrEnum):  # noqa: N801
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
+    XHIGH = "xhigh"
     MAX = "max"
 
 
-DEFAULT_EFFORT_LEVEL = VALID_EFFORT_LEVELS.MAX
+DEFAULT_EFFORT_LEVEL = VALID_EFFORT_LEVELS.XHIGH
 
 
 def _resolve_effort_level() -> VALID_EFFORT_LEVELS:

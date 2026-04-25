@@ -299,12 +299,17 @@ def _run_project_verification(cwd: Path) -> VerificationResult:
 
 
 def _has_acceptance_criteria(body: str) -> bool:
-    """Check for an acceptance criteria section with checklist items."""
-    match = re.search(r"#{2,}\s+acceptance\s+criteria", body, re.IGNORECASE)
+    """Check for an acceptance criteria section with checklist items.
+
+    The section ends at the next heading at the same level or higher (fewer #s),
+    so deeper sub-headings (e.g. ### inside an ## section) stay part of it.
+    """
+    match = re.search(r"(#{2,})\s+acceptance\s+criteria", body, re.IGNORECASE)
     if not match:
         return False
+    heading_level = len(match.group(1))
     section_start = match.end()
-    next_heading = re.search(r"\n#{2,}\s+", body[section_start:])
+    next_heading = re.search(rf"\n#{{1,{heading_level}}}\s+", body[section_start:])
     section = body[section_start : section_start + next_heading.start()] if next_heading else body[section_start:]
     return bool(re.search(r"-\s*\[[\sx]\]", section))
 

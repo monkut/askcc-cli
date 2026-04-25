@@ -127,6 +127,62 @@ Edit any file to customize the agent's behavior. User prompt templates **must** 
 
 Override the config directory by setting the `ASKCC_HOME` environment variable (e.g. for testing).
 
+#### Subagent Frontmatter
+
+Each `*_SYSTEM_PROMPT.md` template may begin with a [Claude Code subagent](https://code.claude.com/docs/en/subagents.md)–style YAML frontmatter block that declares the agent's tool surface, model, and reasoning effort:
+
+```markdown
+---
+name: develop
+description: Develops a planned/defined issue
+tools: Read, Write, Edit, Bash, Grep, Glob
+model: opus
+effort: max
+max_thinking_tokens: 32000
+max_turns: 200
+---
+You are an expert software developer ...
+```
+
+Recognized fields (all optional):
+
+| Field | Type | Allowed values |
+|---|---|---|
+| `name` | string | informational |
+| `description` | string | informational |
+| `tools` | comma-separated list | translated to `--allowedTools` (e.g. `Read, Bash(gh:*)`) |
+| `disallowed_tools` | comma-separated list | translated to `--disallowedTools` |
+| `model` | string | `opus`, `sonnet`, `haiku`, `inherit` |
+| `effort` | string | `low`, `medium`, `high`, `xhigh`, `max` |
+| `max_thinking_tokens` | integer | thinking token budget |
+| `max_turns` | integer | translated to `--max-turns` |
+
+Templates without frontmatter continue to work unchanged. Invalid values (e.g. `model: opuz`, `effort: turbo`) raise a clear error at load time rather than mid-run.
+
+##### Per-Action Defaults
+
+| Action | tools | model | effort |
+|---|---|---|---|
+| `prepare` | `Read, Grep, Glob, Bash(gh:*)` | `sonnet` | `medium` |
+| `plan` | `Read, Grep, Glob, Bash(gh:*)` | `opus` | `high` |
+| `develop` | `Read, Write, Edit, Bash, Grep, Glob` | `opus` | `max` |
+| `issue-review` | `Read, Grep, Glob, Bash(gh:*)` | `sonnet` | `medium` |
+| `pr-review` | `Read, Grep, Glob, Bash(gh:*,git:*)` | `opus` | `high` |
+| `explore` | `Read, Grep, Glob, Bash(gh:*)` | `sonnet` | `high` |
+| `diagnose` | `Read, Grep, Glob, Bash(gh:*,git:*)` | `sonnet` | `high` |
+| `fix-ci` | `Read, Write, Edit, Bash, Grep, Glob` | `sonnet` | `high` |
+
+Note: askcc runs `claude` with `--dangerously-skip-permissions` so it can execute unattended; the per-action `tools` allowlist is the safety boundary that narrows what each agent can call.
+
+##### Override Precedence
+
+For `effort` and `max_thinking_tokens`, askcc resolves the effective value in this order (highest wins):
+
+1. Explicit CLI flag (`--effort`, `--max-thinking-tokens`)
+2. Environment variable (`ASKCC_CLAUDE_EFFORT_LEVEL`, `ASKCC_CLAUDE_MAX_THINKING_TOKENS`)
+3. Template frontmatter (per-action default in `~/.askcc/templates/`)
+4. Built-in default (`xhigh`, `21000`)
+
 ### Post-Develop Verification
 
 After the `develop` command completes successfully, askcc can run verification commands (tests, linting, type checks) before transitioning the issue to `action:review`. This is **optional** — if no verification config is found, the transition proceeds without checks.

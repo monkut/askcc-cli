@@ -38,6 +38,20 @@ class Runner(ABC):
         """Execute a prompt and return (exit_code, usage_dict_or_none)."""
 
 
+def _frontmatter_cli_flags(config: AgentConfig) -> list[str]:
+    """Translate AgentConfig frontmatter fields into claude CLI flags."""
+    flags: list[str] = []
+    if config.model:
+        flags.extend(["--model", config.model])
+    if config.tools:
+        flags.extend(["--allowedTools", ",".join(config.tools)])
+    if config.disallowed_tools:
+        flags.extend(["--disallowedTools", ",".join(config.disallowed_tools)])
+    if config.max_turns is not None:
+        flags.extend(["--max-turns", str(config.max_turns)])
+    return flags
+
+
 class ClaudeRunner(Runner):
     """Runs tasks via the Claude Code CLI."""
 
@@ -66,9 +80,9 @@ class ClaudeRunner(Runner):
             "--agents",
             json.dumps(agent_definition),
         ]
-
         if effort_level:
             cmd.extend(["--effort", effort_level])
+        cmd.extend(_frontmatter_cli_flags(config))
 
         # Remove CLAUDECODE env var so the child claude process doesn't think it's nested inside Claude Code
         env = os.environ.copy()

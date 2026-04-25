@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 import subprocess
 import sys
 import tempfile
@@ -55,6 +56,33 @@ def _build_prompt(
     return prompt, tempfiles
 
 
+def _resolve_effort(cli_effort: str | None, frontmatter_effort: str | None) -> str:
+    """Precedence: CLI flag > env var > template frontmatter > built-in default."""
+    if cli_effort is not None:
+        return cli_effort
+    env_value = os.environ.get("ASKCC_CLAUDE_EFFORT_LEVEL", "")
+    if env_value:
+        try:
+            return VALID_EFFORT_LEVELS(env_value).value
+        except ValueError:
+            logger.warning("Invalid ASKCC_CLAUDE_EFFORT_LEVEL=%r — falling through to frontmatter/default", env_value)
+    if frontmatter_effort is not None:
+        return frontmatter_effort
+    return settings.DEFAULT_EFFORT_LEVEL
+
+
+def _resolve_max_thinking_tokens(cli_value: int | None, frontmatter_value: int | None) -> int:
+    """Precedence: CLI flag > env var > template frontmatter > built-in default."""
+    if cli_value is not None:
+        return cli_value
+    raw_env = os.environ.get("ASKCC_CLAUDE_MAX_THINKING_TOKENS", "")
+    if raw_env.isdigit():
+        return int(raw_env)
+    if frontmatter_value is not None:
+        return frontmatter_value
+    return settings.DEFAULT_MAX_THINKING_TOKENS
+
+
 def _print_validation_report(issue_url: str, checks: list[CheckResult]) -> None:
     """Print a structured pass/fail validation report."""
     passed_count = sum(1 for c in checks if c.passed)
@@ -108,16 +136,18 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
     parser.add_argument(
         "--effort",
         choices=VALID_EFFORT_LEVELS,
-        default=settings.ASKCC_CLAUDE_EFFORT_LEVEL,
-        help=f"Claude thinking effort level (default: {settings.ASKCC_CLAUDE_EFFORT_LEVEL}). "
-        "Env: ASKCC_CLAUDE_EFFORT_LEVEL.",
+        default=None,
+        help=f"Claude thinking effort level. "
+        f"Precedence: CLI > env (ASKCC_CLAUDE_EFFORT_LEVEL) > template frontmatter > "
+        f"built-in default ({settings.DEFAULT_EFFORT_LEVEL}).",
     )
     parser.add_argument(
         "--max-thinking-tokens",
         type=int,
-        default=settings.ASKCC_CLAUDE_MAX_THINKING_TOKENS,
-        help=f"Thinking token budget (default: {settings.ASKCC_CLAUDE_MAX_THINKING_TOKENS}). "
-        "Env: ASKCC_CLAUDE_MAX_THINKING_TOKENS.",
+        default=None,
+        help=f"Thinking token budget. "
+        f"Precedence: CLI > env (ASKCC_CLAUDE_MAX_THINKING_TOKENS) > template frontmatter > "
+        f"built-in default ({settings.DEFAULT_MAX_THINKING_TOKENS}).",
     )
     parser.add_argument(
         "--disable-thinking",
@@ -250,14 +280,16 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
     if args.language != SupportedLanguage.ENGLISH:
         prompt += f"\nOutput all comments in {args.language}."
     runner = get_runner(args.runner)
+    effort_level = _resolve_effort(args.effort, config.effort)
+    max_thinking_tokens = _resolve_max_thinking_tokens(args.max_thinking_tokens, config.max_thinking_tokens)
     try:
         return_code, usage = runner.run(
             prompt,
             config=config,
             issue_url=issue_url,
             cwd=cwd,
-            effort_level=args.effort,
-            max_thinking_tokens=args.max_thinking_tokens,
+            effort_level=effort_level,
+            max_thinking_tokens=max_thinking_tokens,
             disable_thinking=args.disable_thinking,
             disable_adaptive_thinking=args.disable_adaptive_thinking,
         )

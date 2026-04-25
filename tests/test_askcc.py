@@ -36,6 +36,7 @@ from askcc.functions import (
     install_skills,
     load_agent_config,
     load_template,
+    parse_frontmatter,
     transition_issue_to_development,
     transition_issue_to_planning,
     transition_issue_to_review,
@@ -1678,13 +1679,13 @@ class TestThinkingCLIFlags:
         assert call_kwargs.kwargs["disable_adaptive_thinking"] is False
 
     def test_effort_env_default_used(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setattr("askcc.cli.settings.ASKCC_CLAUDE_EFFORT_LEVEL", "low")
+        monkeypatch.setenv("ASKCC_CLAUDE_EFFORT_LEVEL", "low")
         mock_runner = self._run_main_with_args([])
         call_kwargs = mock_runner.run.call_args
         assert call_kwargs.kwargs["effort_level"] == "low"
 
     def test_cli_flag_overrides_env_default(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setattr("askcc.cli.settings.ASKCC_CLAUDE_EFFORT_LEVEL", "low")
+        monkeypatch.setenv("ASKCC_CLAUDE_EFFORT_LEVEL", "low")
         mock_runner = self._run_main_with_args(["--effort", "max"])
         call_kwargs = mock_runner.run.call_args
         assert call_kwargs.kwargs["effort_level"] == "max"
@@ -1809,3 +1810,227 @@ class TestClaudeRunnerThinkingOptions:
             )
         env = mock_run.call_args[1]["env"]
         assert CLAUDE_ENV_DISABLE_THINKING not in env
+
+
+class TestParseFrontmatter:
+    """Tests for the YAML-style subagent frontmatter parser."""
+
+    def _parse(self, text: str) -> tuple[dict, str]:
+        return parse_frontmatter(text, source="test.md")
+
+    def test_no_frontmatter_returns_empty_and_full_text(self):
+        text = "Just a plain prompt body.\nNo frontmatter here.\n"
+        fields, body = self._parse(text)
+        assert fields == {}
+        assert body == text
+
+    def test_basic_frontmatter_parsed(self):
+        text = "---\nname: develop\nmodel: opus\neffort: max\n---\nPrompt body here.\n"
+        fields, body = self._parse(text)
+        assert fields["name"] == "develop"
+        assert fields["model"] == "opus"
+        assert fields["effort"] == "max"
+        assert body == "Prompt body here.\n"
+
+    def test_tools_parsed_as_tuple(self):
+        text = "---\ntools: Read, Write, Bash(gh:*)\n---\nbody\n"
+        fields, _ = self._parse(text)
+        assert fields["tools"] == ("Read", "Write", "Bash(gh:*)")
+
+    def test_int_field_parsed(self):
+        text = "---\nmax_thinking_tokens: 32000\nmax_turns: 200\n---\nbody\n"
+        fields, _ = self._parse(text)
+        assert fields["max_thinking_tokens"] == 32000
+        assert fields["max_turns"] == 200
+
+    def test_int_field_invalid_raises(self):
+        text = "---\nmax_thinking_tokens: not-a-number\n---\nbody\n"
+        with pytest.raises(ValueError, match="must be an integer"):
+            self._parse(text)
+
+    def test_invalid_model_raises(self):
+        text = "---\nmodel: opuz\n---\nbody\n"
+        with pytest.raises(ValueError, match="model.*invalid value"):
+            self._parse(text)
+
+    def test_invalid_effort_raises(self):
+        text = "---\neffort: turbo\n---\nbody\n"
+        with pytest.raises(ValueError, match="effort.*invalid value"):
+            self._parse(text)
+
+    def test_unclosed_frontmatter_raises(self):
+        text = "---\nname: develop\nbody never ends with closing delimiter\n"
+        with pytest.raises(ValueError, match="missing the closing"):
+            self._parse(text)
+
+    def test_unknown_key_warned_and_ignored(self, caplog: pytest.LogCaptureFixture):
+        text = "---\nname: develop\nmade_up_field: foo\n---\nbody\n"
+        with caplog.at_level("WARNING", logger="askcc.functions"):
+            fields, _ = self._parse(text)
+        assert "made_up_field" not in fields
+        assert "Unknown frontmatter key" in caplog.text
+
+    def test_blank_and_comment_lines_skipped(self):
+        text = "---\n# a comment\nname: develop\n\nmodel: opus\n---\nbody\n"
+        fields, _ = self._parse(text)
+        assert fields == {"name": "develop", "model": "opus"}
+
+
+class TestLoadAgentConfigFrontmatter:
+    """Tests that load_agent_config picks up frontmatter overrides from disk."""
+
+    def test_default_template_yields_frontmatter_fields(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        templates_dir = tmp_path / "templates"
+        monkeypatch.setattr("askcc.functions.TEMPLATES_DIR", templates_dir)
+        bootstrap_templates()
+
+        config = load_agent_config(AgentAction.DEVELOP)
+        assert config.model == "opus"
+        assert config.effort == "max"
+        assert "Edit" in (config.tools or ())
+        # Frontmatter should be stripped from the system prompt body
+        assert not config.system_prompt.startswith("---")
+
+    def test_template_without_frontmatter_back_compat(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        templates_dir = tmp_path / "templates"
+        templates_dir.mkdir(parents=True)
+        monkeypatch.setattr("askcc.functions.TEMPLATES_DIR", templates_dir)
+
+        # User-style template with no frontmatter
+        (templates_dir / "PLAN_SYSTEM_PROMPT.md").write_text("Plain system prompt with no frontmatter.\n")
+        (templates_dir / "PLAN_USER_PROMPT.md").write_text("Read $issue_content_file and plan.\n")
+
+        config = load_agent_config(AgentAction.PLAN)
+        assert config.system_prompt == "Plain system prompt with no frontmatter.\n"
+        assert config.model is None
+        assert config.effort is None
+        assert config.tools is None
+
+    def test_user_frontmatter_overrides_default(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        templates_dir = tmp_path / "templates"
+        templates_dir.mkdir(parents=True)
+        monkeypatch.setattr("askcc.functions.TEMPLATES_DIR", templates_dir)
+
+        custom = "---\nmodel: haiku\neffort: low\n---\nCustom plan body.\n"
+        (templates_dir / "PLAN_SYSTEM_PROMPT.md").write_text(custom)
+        (templates_dir / "PLAN_USER_PROMPT.md").write_text("Read $issue_content_file and plan.\n")
+
+        config = load_agent_config(AgentAction.PLAN)
+        assert config.model == "haiku"
+        assert config.effort == "low"
+        assert config.system_prompt == "Custom plan body.\n"
+
+    def test_invalid_frontmatter_raises_at_load(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        templates_dir = tmp_path / "templates"
+        templates_dir.mkdir(parents=True)
+        monkeypatch.setattr("askcc.functions.TEMPLATES_DIR", templates_dir)
+
+        bad = "---\nmodel: opuz\n---\nbody\n"
+        (templates_dir / "PLAN_SYSTEM_PROMPT.md").write_text(bad)
+        (templates_dir / "PLAN_USER_PROMPT.md").write_text("Read $issue_content_file and plan.\n")
+
+        with pytest.raises(ValueError, match="model.*invalid value"):
+            load_agent_config(AgentAction.PLAN)
+
+
+class TestEffortPrecedence:
+    """Tests for CLI > env > frontmatter > built-in default precedence."""
+
+    ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/1"
+
+    def _run_main(self, args: list[str], frontmatter_effort: str | None = "high") -> MagicMock:
+        mock_runner = _mock_runner()
+        # Build a fake AgentConfig that overrides the default frontmatter effort
+        base = AGENT_CONFIGS[AgentAction.PLAN]
+        fake_config = AgentConfig(
+            action_name=base.action_name,
+            description=base.description,
+            system_prompt="body",
+            user_prompt_template=base.user_prompt_template,
+            system_prompt_file=base.system_prompt_file,
+            user_prompt_file=base.user_prompt_file,
+            required_variables=base.required_variables,
+            effort=frontmatter_effort,
+        )
+        with (
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.validate_issue_labels", return_value=[]),
+            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
+            patch("askcc.cli.load_agent_config", return_value=fake_config),
+            patch("askcc.cli.transition_issue_to_development"),
+            patch("askcc.cli.get_runner", return_value=mock_runner),
+            patch("sys.argv", ["askcc", *args, "plan", "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit),
+        ):
+            main()
+        return mock_runner
+
+    def test_cli_overrides_frontmatter_and_env(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("ASKCC_CLAUDE_EFFORT_LEVEL", "medium")
+        runner = self._run_main(["--effort", "max"], frontmatter_effort="low")
+        assert runner.run.call_args.kwargs["effort_level"] == "max"
+
+    def test_env_overrides_frontmatter(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("ASKCC_CLAUDE_EFFORT_LEVEL", "medium")
+        runner = self._run_main([], frontmatter_effort="low")
+        assert runner.run.call_args.kwargs["effort_level"] == "medium"
+
+    def test_frontmatter_used_when_no_cli_or_env(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("ASKCC_CLAUDE_EFFORT_LEVEL", raising=False)
+        runner = self._run_main([], frontmatter_effort="low")
+        assert runner.run.call_args.kwargs["effort_level"] == "low"
+
+    def test_default_used_when_no_cli_env_or_frontmatter(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("ASKCC_CLAUDE_EFFORT_LEVEL", raising=False)
+        runner = self._run_main([], frontmatter_effort=None)
+        assert runner.run.call_args.kwargs["effort_level"] == DEFAULT_EFFORT_LEVEL
+
+
+class TestRunnerFrontmatterFlags:
+    """Tests that ClaudeRunner translates AgentConfig frontmatter fields to CLI flags."""
+
+    ISSUE_URL = "https://github.com/test/repo/issues/1"
+
+    def _config(self, **overrides) -> AgentConfig:
+        base = {
+            "action_name": "test",
+            "description": "test",
+            "system_prompt": "prompt",
+            "user_prompt_template": "$issue_content_file",
+            "system_prompt_file": "TEST_SYSTEM_PROMPT.md",
+            "user_prompt_file": "TEST_USER_PROMPT.md",
+        }
+        base.update(overrides)
+        return AgentConfig(**base)
+
+    def _run(self, config: AgentConfig) -> list[str]:
+        runner = ClaudeRunner()
+        mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="{}", stderr="")
+        with patch("askcc.runners.subprocess.run", return_value=mock_result) as mock_run:
+            runner.run("prompt", config=config, issue_url=self.ISSUE_URL, cwd=Path.cwd())
+        return mock_run.call_args[0][0]
+
+    def test_model_flag_emitted(self):
+        cmd = self._run(self._config(model="opus"))
+        assert "--model" in cmd
+        assert cmd[cmd.index("--model") + 1] == "opus"
+
+    def test_tools_flag_emitted_as_csv(self):
+        cmd = self._run(self._config(tools=("Read", "Write", "Bash(gh:*)")))
+        assert "--allowedTools" in cmd
+        assert cmd[cmd.index("--allowedTools") + 1] == "Read,Write,Bash(gh:*)"
+
+    def test_disallowed_tools_flag_emitted(self):
+        cmd = self._run(self._config(disallowed_tools=("WebFetch",)))
+        assert "--disallowedTools" in cmd
+        assert cmd[cmd.index("--disallowedTools") + 1] == "WebFetch"
+
+    def test_max_turns_flag_emitted(self):
+        cmd = self._run(self._config(max_turns=200))
+        assert "--max-turns" in cmd
+        assert cmd[cmd.index("--max-turns") + 1] == "200"
+
+    def test_no_frontmatter_flags_when_unset(self):
+        cmd = self._run(self._config())
+        for flag in ("--model", "--allowedTools", "--disallowedTools", "--max-turns"):
+            assert flag not in cmd

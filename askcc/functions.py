@@ -12,7 +12,13 @@ from pathlib import Path
 from string import Template
 from urllib.parse import urlparse
 
-from .definitions import AGENT_CONFIGS, AgentAction, AgentConfig
+from .definitions import (
+    AGENT_CONFIGS,
+    KNOWN_FRONTMATTER_KEYS,
+    VALID_FRONTMATTER_MODELS,
+    AgentAction,
+    AgentConfig,
+)
 from .settings import (
     BLOCKING_LABELS,
     DEVELOP_LABEL,
@@ -24,6 +30,7 @@ from .settings import (
     REVIEW_LABEL,
     REVIEW_STATUS_OPTIONS,
     TEMPLATES_DIR,
+    VALID_EFFORT_LEVELS,
 )
 
 logger = logging.getLogger(__name__)
@@ -774,13 +781,101 @@ def write_prompt_content(
     return filepath
 
 
+FRONTMATTER_DELIMITER = "---"
+_LIST_FRONTMATTER_FIELDS: frozenset[str] = frozenset({"tools", "disallowed_tools"})
+_INT_FRONTMATTER_FIELDS: frozenset[str] = frozenset({"max_thinking_tokens", "max_turns"})
+
+
+def _coerce_frontmatter_value(key: str, value: str, source: str) -> object:
+    """Coerce a raw frontmatter value to its typed form (list/int/string)."""
+    if key in _LIST_FRONTMATTER_FIELDS:
+        return tuple(item.strip() for item in value.split(",") if item.strip()) if value else ()
+    if key in _INT_FRONTMATTER_FIELDS:
+        try:
+            return int(value)
+        except ValueError as exc:
+            msg = f"Frontmatter field '{key}' in {source} must be an integer, got {value!r}"
+            raise ValueError(msg) from exc
+    return value
+
+
+def _validate_frontmatter_enums(fields: dict, source: str) -> None:
+    """Raise ValueError when enum-valued fields contain unsupported values."""
+    if "model" in fields and fields["model"] not in VALID_FRONTMATTER_MODELS:
+        msg = (
+            f"Frontmatter field 'model' in {source} has invalid value {fields['model']!r}"
+            f" (allowed: {', '.join(VALID_FRONTMATTER_MODELS)})"
+        )
+        raise ValueError(msg)
+    if "effort" in fields:
+        try:
+            VALID_EFFORT_LEVELS(fields["effort"])
+        except ValueError as exc:
+            msg = (
+                f"Frontmatter field 'effort' in {source} has invalid value {fields['effort']!r}"
+                f" (allowed: {', '.join(VALID_EFFORT_LEVELS)})"
+            )
+            raise ValueError(msg) from exc
+
+
+def parse_frontmatter(text: str, *, source: str = "<inline>") -> tuple[dict, str]:
+    r"""Split a Claude Code subagent-style YAML frontmatter block from its body.
+
+    Recognizes a leading `---\n...\n---\n` block. Supports flat `key: value`
+    lines only — no nested mappings or multi-line values. List fields are
+    comma-separated; int fields are parsed as integers.
+
+    Returns (parsed_fields, body_without_frontmatter). When no frontmatter is
+    present, returns ({}, text) unchanged for back-compat.
+    """
+    lines = text.splitlines(keepends=True)
+    if not lines or lines[0].rstrip("\r\n") != FRONTMATTER_DELIMITER:
+        return {}, text
+
+    end_idx = next(
+        (i for i in range(1, len(lines)) if lines[i].rstrip("\r\n") == FRONTMATTER_DELIMITER),
+        None,
+    )
+    if end_idx is None:
+        msg = f"Frontmatter in {source} is missing the closing '---' delimiter"
+        raise ValueError(msg)
+
+    fields: dict = {}
+    for raw_line in lines[1:end_idx]:
+        line = raw_line.rstrip("\r\n")
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if ":" not in line:
+            msg = f"Frontmatter in {source} has malformed line (no ':'): {line!r}"
+            raise ValueError(msg)
+        key, _, value = line.partition(":")
+        key = key.strip()
+        if key not in KNOWN_FRONTMATTER_KEYS:
+            logger.warning("Unknown frontmatter key in %s: %r — ignoring", source, key)
+            continue
+        fields[key] = _coerce_frontmatter_value(key, value.strip(), source)
+
+    _validate_frontmatter_enums(fields, source)
+    body = "".join(lines[end_idx + 1 :])
+    return fields, body
+
+
 def load_agent_config(agent: AgentAction) -> AgentConfig:
-    """Load an AgentConfig with templates read from disk, falling back to built-in defaults."""
+    """Load an AgentConfig with templates read from disk, falling back to built-in defaults.
+
+    If the loaded system_prompt begins with a `---`-delimited frontmatter block,
+    its fields override the AgentConfig's defaults (model, effort, tools, etc.)
+    and the body becomes the system_prompt. Templates without frontmatter are
+    returned unchanged.
+    """
     base = AGENT_CONFIGS[agent]
     user_prompt_template = load_template(base.user_prompt_file, base.user_prompt_template)
     validate_template(user_prompt_template, base.required_variables, base.user_prompt_file)
-    return replace(
-        base,
-        system_prompt=load_template(base.system_prompt_file, base.system_prompt),
-        user_prompt_template=user_prompt_template,
-    )
+    raw_system_prompt = load_template(base.system_prompt_file, base.system_prompt)
+    fields, body = parse_frontmatter(raw_system_prompt, source=base.system_prompt_file)
+    overrides: dict = {"system_prompt": body, "user_prompt_template": user_prompt_template}
+    for key in ("tools", "disallowed_tools", "model", "effort", "max_thinking_tokens", "max_turns"):
+        if key in fields:
+            overrides[key] = fields[key]
+    return replace(base, **overrides)

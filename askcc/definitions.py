@@ -34,6 +34,13 @@ Do not create the label if it does not exist.
 
 PREPARE_AGENT_PROMPT = (
     """\
+---
+name: prepare
+description: Analyzes a backlog issue for development readiness and suggests improvements
+tools: Read, Grep, Glob, Bash(gh:*)
+model: sonnet
+effort: medium
+---
 You are an issue preparation specialist operating inside Claude Code with access to the filesystem, git, and the gh CLI.
 
 Goal: Analyze the given GitHub issue for development readiness and post a structured preparation comment \
@@ -108,6 +115,13 @@ PREPARE_USER_PROMPT_TEMPLATE = (
 
 PLAN_AGENT_PROMPT = (
     """\
+---
+name: plan
+description: Plans implementation for given issue
+tools: Read, Grep, Glob, Bash(gh:*)
+model: opus
+effort: high
+---
 You are a software architect operating inside Claude Code with access to the filesystem, git, and the gh CLI.
 
 Goal: Analyze the given GitHub issue against this project's codebase and produce a structured implementation plan.
@@ -164,7 +178,19 @@ Use `gh issue comment <url> --body "<your summary>"`.
 """
 )
 
+# NOTE: develop and fix-ci require write access (Edit/Write/Bash) to actually
+# implement changes and run tests. The runner currently passes
+# `--dangerously-skip-permissions` globally so all actions run unattended; the
+# tools allowlist below is the per-action safety boundary for these write-capable
+# agents.
 DEVELOP_AGENT_PROMPT = f"""\
+---
+name: develop
+description: Develops a planned/defined issue
+tools: Read, Write, Edit, Bash, Grep, Glob
+model: opus
+effort: max
+---
 You are an expert software developer operating inside Claude Code with access to the filesystem, git, and the gh CLI.
 
 Goal: Implement the planned GitHub issue, open a pull request, and link it back to the issue.
@@ -260,6 +286,13 @@ On completion:
 
 REVIEW_AGENT_PROMPT = (
     """\
+---
+name: issue-review
+description: Reviews a GitHub issue for clarity, completeness, and feasibility
+tools: Read, Grep, Glob, Bash(gh:*)
+model: sonnet
+effort: medium
+---
 You are an issue reviewer operating inside Claude Code with access to the filesystem, git, and the gh CLI.
 
 Goal: Review the given GitHub issue for clarity, completeness, and feasibility, then post actionable feedback \
@@ -297,6 +330,13 @@ Do NOT skip this step — the comment is the primary deliverable of this task.
 
 EXPLORE_AGENT_PROMPT = (
     """\
+---
+name: explore
+description: Investigates a GitHub issue and proposes best-practice solutions
+tools: Read, Grep, Glob, Bash(gh:*)
+model: sonnet
+effort: high
+---
 You are a solutions architect operating inside Claude Code with access to the filesystem, git, and the gh CLI.
 
 Goal: Investigate the given GitHub issue, research the codebase, and propose best-practice solutions with trade-offs.
@@ -351,6 +391,13 @@ EXPLORE_USER_PROMPT_TEMPLATE = (
 
 DIAGNOSE_AGENT_PROMPT = (
     """\
+---
+name: diagnose
+description: Investigates a reported issue and identifies potential causes
+tools: Read, Grep, Glob, Bash(gh:*,git:*)
+model: sonnet
+effort: high
+---
 You are a diagnostic engineer operating inside Claude Code with access to the filesystem, git, and the gh CLI.
 
 Goal: Investigate the reported issue, identify potential root causes, flag unknowns, and request additional \
@@ -403,6 +450,13 @@ DIAGNOSE_USER_PROMPT_TEMPLATE = (
 
 REVIEWPR_AGENT_PROMPT = (
     """\
+---
+name: pr-review
+description: Reviews a pull request against its linked issue's Definition of Done
+tools: Read, Grep, Glob, Bash(gh:*,git:*)
+model: opus
+effort: high
+---
 You are a code reviewer operating inside Claude Code with access to the filesystem, git, and the gh CLI.
 
 Goal: Review the pull request linked to the given GitHub issue, verify it meets the Definition of Done, \
@@ -476,7 +530,17 @@ DEVELOP_USER_PROMPT_TEMPLATE = (
 )
 
 
+# See note above DEVELOP_AGENT_PROMPT — fix-ci is a write-capable action that
+# needs Edit/Write/Bash to apply CI fixes; rely on the tools allowlist below for
+# the per-action safety boundary.
 FIXCI_AGENT_PROMPT = """\
+---
+name: fix-ci
+description: Identifies failing CI checks on the current PR or branch and implements fixes
+tools: Read, Write, Edit, Bash, Grep, Glob
+model: sonnet
+effort: high
+---
 You are a CI fix specialist operating inside Claude Code with access to the filesystem, git, and the gh CLI.
 
 Goal: Identify failing CI checks on the current PR or branch and implement fixes to make them pass.
@@ -542,6 +606,22 @@ class AgentConfig:
     system_prompt_file: str
     user_prompt_file: str
     required_variables: tuple[str, ...] = ()
+    # Subagent-style frontmatter fields — populated from the system_prompt's
+    # leading `---`-delimited block by load_agent_config when present.
+    tools: tuple[str, ...] | None = None
+    disallowed_tools: tuple[str, ...] | None = None
+    model: str | None = None
+    effort: str | None = None
+    max_thinking_tokens: int | None = None
+    max_turns: int | None = None
+
+
+# Allowed values for frontmatter enum fields (validated at load time).
+VALID_FRONTMATTER_MODELS: tuple[str, ...] = ("opus", "sonnet", "haiku", "inherit")
+# Frontmatter keys recognized by the parser. Unknown keys are warned and ignored.
+KNOWN_FRONTMATTER_KEYS: frozenset[str] = frozenset(
+    {"name", "description", "tools", "disallowed_tools", "model", "effort", "max_thinking_tokens", "max_turns"}
+)
 
 
 class SupportedLanguage(StrEnum):

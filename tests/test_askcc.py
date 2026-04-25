@@ -610,6 +610,31 @@ class TestHasAcceptanceCriteria:
         body = "### Acceptance Criteria\n- [ ] Works with h3\n"
         assert _has_acceptance_criteria(body) is True
 
+    def test_h2_section_with_h3_subheadings(self):
+        body = (
+            "## Acceptance Criteria\n\n"
+            "### Core Responder Abstraction\n"
+            "- [ ] Responder ABC defined\n"
+            "- [ ] validate_input pass-through\n\n"
+            "### Guardrail\n"
+            "- [ ] LLMGuardrail class defined\n"
+        )
+        assert _has_acceptance_criteria(body) is True
+
+    def test_h2_section_with_h3_subheadings_then_other_h2(self):
+        body = (
+            "## Acceptance Criteria\n\n### Group A\n- [ ] Item one\n\n## Other Section\n- [ ] Should not be counted\n"
+        )
+        assert _has_acceptance_criteria(body) is True
+
+    def test_h3_section_with_h4_subheadings(self):
+        body = "### Acceptance Criteria\n\n#### Subgroup\n- [ ] Item under h4\n"
+        assert _has_acceptance_criteria(body) is True
+
+    def test_h3_section_terminated_by_sibling_h3(self):
+        body = "### Acceptance Criteria\nPlain text with no checklist.\n\n### Other\n- [ ] Wrong section\n"
+        assert _has_acceptance_criteria(body) is False
+
 
 class TestHasDependenciesSection:
     def test_dependencies_heading(self):

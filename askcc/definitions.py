@@ -467,6 +467,12 @@ Pre-review:
 - Check out the PR branch using `gh pr checkout <number>` to inspect the full source.
 - Run the project's test suite to confirm all tests pass.
 
+Pre-merge guard (CHANGES_REQUESTED):
+- Before merging, check for unresolved CHANGES_REQUESTED reviews using \
+`gh pr view <number> -R <owner/repo> --json reviews --jq '[.reviews[] | select(.state == "CHANGES_REQUESTED")]'`.
+- If any CHANGES_REQUESTED reviews exist, DO NOT merge. Instead, address the requested changes, \
+reply to all inline comments, push a follow-up fix commit on the PR branch, and re-request review.
+
 Definition of Done checklist:
 1. **Acceptance criteria** — verify each criterion from the issue is satisfied by the code changes.
 2. **Test coverage** — new and changed logic has unit tests. Look for untested code paths.

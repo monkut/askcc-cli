@@ -13,6 +13,7 @@ from askcc.cli import main
 from askcc.definitions import (
     AGENT_CONFIGS,
     DEVELOP_AGENT_PROMPT,
+    REVIEWPR_AGENT_PROMPT,
     AgentAction,
     AgentConfig,
     SupportedLanguage,
@@ -276,6 +277,25 @@ class TestDevelopPromptTddContent:
 
     def test_removes_legacy_write_tests_line(self):
         assert "Write tests for every new or changed behavior" not in DEVELOP_AGENT_PROMPT
+
+
+class TestReviewprPromptMergeGuard:
+    """The pr-review prompt must block merging when CHANGES_REQUESTED reviews exist (issue #86)."""
+
+    def test_includes_changes_requested_check_command(self):
+        assert (
+            "gh pr view <number> -R <owner/repo> --json reviews --jq '[.reviews[] "
+            '| select(.state == "CHANGES_REQUESTED")]\'' in REVIEWPR_AGENT_PROMPT
+        )
+
+    def test_includes_do_not_merge_instruction(self):
+        assert "DO NOT merge" in REVIEWPR_AGENT_PROMPT
+
+    def test_includes_address_inline_comments_instruction(self):
+        assert "reply to all inline comments" in REVIEWPR_AGENT_PROMPT
+
+    def test_includes_pre_merge_guard_heading(self):
+        assert "Pre-merge guard" in REVIEWPR_AGENT_PROMPT
 
 
 class TestWritePromptContent:

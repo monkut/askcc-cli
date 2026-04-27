@@ -13,6 +13,7 @@ from askcc.cli import main
 from askcc.definitions import (
     AGENT_CONFIGS,
     DEVELOP_AGENT_PROMPT,
+    FIXCI_AGENT_PROMPT,
     REVIEWPR_AGENT_PROMPT,
     AgentAction,
     AgentConfig,
@@ -296,6 +297,67 @@ class TestReviewprPromptMergeGuard:
 
     def test_includes_pre_merge_guard_heading(self):
         assert "Pre-merge guard" in REVIEWPR_AGENT_PROMPT
+
+
+class TestConfigBoundaryConstraints:
+    """Both develop and fix-ci prompts must forbid relaxing linter/type-checker config (issue #89)."""
+
+    def test_develop_prompt_includes_config_boundaries_heading(self):
+        assert "Configuration boundaries" in DEVELOP_AGENT_PROMPT
+
+    def test_develop_prompt_forbids_modifying_linter_config(self):
+        assert "pyproject.toml" in DEVELOP_AGENT_PROMPT
+        assert "[tool.ruff]" in DEVELOP_AGENT_PROMPT
+        assert "[tool.pyright]" in DEVELOP_AGENT_PROMPT
+        assert "[tool.mypy]" in DEVELOP_AGENT_PROMPT
+        assert ".ruff.toml" in DEVELOP_AGENT_PROMPT
+        assert "pyrightconfig.json" in DEVELOP_AGENT_PROMPT
+        assert "mypy.ini" in DEVELOP_AGENT_PROMPT
+        assert ".pre-commit-config.yaml" in DEVELOP_AGENT_PROMPT
+        assert "ESLint/Prettier" in DEVELOP_AGENT_PROMPT
+        assert "Fix the code, not the config." in DEVELOP_AGENT_PROMPT
+
+    def test_develop_prompt_forbids_inline_suppression_comments(self):
+        assert "# noqa" in DEVELOP_AGENT_PROMPT
+        assert "# type: ignore" in DEVELOP_AGENT_PROMPT
+        assert "# pyright: ignore" in DEVELOP_AGENT_PROMPT
+        assert "eslint-disable" in DEVELOP_AGENT_PROMPT
+
+    def test_develop_prompt_documents_exceptions(self):
+        assert "issue explicitly requests" in DEVELOP_AGENT_PROMPT
+        assert "third-party bug" in DEVELOP_AGENT_PROMPT
+
+    def test_fixci_prompt_includes_config_boundaries_heading(self):
+        assert "Configuration boundaries" in FIXCI_AGENT_PROMPT
+
+    def test_fixci_prompt_places_boundaries_before_fixing_failures(self):
+        boundaries_idx = FIXCI_AGENT_PROMPT.find("Configuration boundaries")
+        fixing_idx = FIXCI_AGENT_PROMPT.find("## Fixing Failures")
+        assert boundaries_idx != -1
+        assert fixing_idx != -1
+        assert boundaries_idx < fixing_idx
+
+    def test_fixci_prompt_forbids_modifying_linter_config(self):
+        assert "pyproject.toml" in FIXCI_AGENT_PROMPT
+        assert "[tool.ruff]" in FIXCI_AGENT_PROMPT
+        assert "[tool.pyright]" in FIXCI_AGENT_PROMPT
+        assert "[tool.mypy]" in FIXCI_AGENT_PROMPT
+        assert ".ruff.toml" in FIXCI_AGENT_PROMPT
+        assert "pyrightconfig.json" in FIXCI_AGENT_PROMPT
+        assert "mypy.ini" in FIXCI_AGENT_PROMPT
+        assert ".pre-commit-config.yaml" in FIXCI_AGENT_PROMPT
+        assert "ESLint/Prettier" in FIXCI_AGENT_PROMPT
+        assert "Fix the code, not the config." in FIXCI_AGENT_PROMPT
+
+    def test_fixci_prompt_forbids_inline_suppression_comments(self):
+        assert "# noqa" in FIXCI_AGENT_PROMPT
+        assert "# type: ignore" in FIXCI_AGENT_PROMPT
+        assert "# pyright: ignore" in FIXCI_AGENT_PROMPT
+        assert "eslint-disable" in FIXCI_AGENT_PROMPT
+
+    def test_fixci_prompt_documents_exceptions(self):
+        assert "issue explicitly requests" in FIXCI_AGENT_PROMPT
+        assert "third-party bug" in FIXCI_AGENT_PROMPT
 
 
 class TestWritePromptContent:

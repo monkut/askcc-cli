@@ -178,6 +178,29 @@ Use `gh issue comment <url> --body "<your summary>"`.
 """
 )
 
+# Shared constraint reused by DEVELOP_AGENT_PROMPT and FIXCI_AGENT_PROMPT to keep
+# wording in sync between the two prompts (issue #89).
+CONFIG_BOUNDARIES_BODY = """\
+- Do NOT modify linter, formatter, or type-checker config files \
+(pyproject.toml [tool.ruff]/[tool.pyright]/[tool.mypy] sections, .ruff.toml, \
+pyrightconfig.json, mypy.ini, .pre-commit-config.yaml, ESLint/Prettier configs) \
+to silence errors. Fix the code, not the config.
+- Do NOT add `# noqa`, `# type: ignore`, `# pyright: ignore`, `eslint-disable`, \
+or similar inline suppression comments. Fix the underlying issue.
+- The only exceptions are when the originating issue explicitly requests a \
+configuration or rule change, or when a known third-party bug requires \
+documented suppression — in which case add a comment explaining why."""
+
+DEVELOP_CONFIG_BOUNDARIES = (
+    "Configuration boundaries (do not cross unless the issue explicitly requests it):\n" + CONFIG_BOUNDARIES_BODY
+)
+
+FIXCI_CONFIG_BOUNDARIES = (
+    "## Configuration boundaries\n\n"
+    "Do not cross these boundaries unless the issue explicitly requests it:\n\n" + CONFIG_BOUNDARIES_BODY
+)
+
+
 # NOTE: develop and fix-ci require write access (Edit/Write/Bash) to actually
 # implement changes and run tests. The runner currently passes
 # `--dangerously-skip-permissions` globally so all actions run unattended; the
@@ -258,6 +281,8 @@ Security checklist (verify before committing):
 - No unsafe input handling — validate and sanitize all external input at system boundaries.
 - No hardcoded credentials or connection strings — use environment variables or secrets management.
 - No overly permissive file or network access introduced by the change.
+
+{DEVELOP_CONFIG_BOUNDARIES}
 
 PR description:
 - Include a `## Key Flows` section with mermaid diagrams illustrating the main flows \
@@ -551,7 +576,8 @@ DEVELOP_USER_PROMPT_TEMPLATE = (
 # See note above DEVELOP_AGENT_PROMPT — fix-ci is a write-capable action that
 # needs Edit/Write/Bash to apply CI fixes; rely on the tools allowlist below for
 # the per-action safety boundary.
-FIXCI_AGENT_PROMPT = """\
+FIXCI_AGENT_PROMPT = (
+    """\
 ---
 name: fix-ci
 description: Identifies failing CI checks on the current PR or branch and implements fixes
@@ -585,6 +611,10 @@ Goal: Identify failing CI checks on the current PR or branch and implement fixes
    - **Build errors**: import errors, syntax errors, missing dependencies
    - **Type errors**: pyright/mypy errors — fix type annotations
 
+"""
+    + FIXCI_CONFIG_BOUNDARIES
+    + """
+
 ## Fixing Failures
 
 7. Read all relevant source files before making changes. Do not speculate about code you have not opened.
@@ -606,6 +636,7 @@ Goal: Identify failing CI checks on the current PR or branch and implement fixes
 
 IMPORTANT: Only fix CI failures. Do not introduce new features or unrelated changes.
 """
+)
 
 FIXCI_USER_PROMPT_TEMPLATE = (
     "Identify failing CI checks on the current branch or linked PR and implement fixes to make them pass."

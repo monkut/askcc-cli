@@ -16,7 +16,6 @@ from askcc.definitions import (
     REVIEWPR_AGENT_PROMPT,
     AgentAction,
     AgentConfig,
-    SupportedLanguage,
 )
 from askcc.functions import (
     CheckResult,
@@ -47,12 +46,17 @@ from askcc.functions import (
 )
 from askcc.runners import ClaudeRunner, get_runner
 from askcc.settings import (
+    ASKCC_HOME,
     CLAUDE_ENV_DISABLE_ADAPTIVE_THINKING,
     CLAUDE_ENV_DISABLE_THINKING,
     CLAUDE_ENV_MAX_THINKING_TOKENS,
     DEFAULT_EFFORT_LEVEL,
     DEFAULT_MAX_THINKING_TOKENS,
+    USER_CONFIG_PATH,
     VALID_EFFORT_LEVELS,
+    SupportedLanguage,
+    _load_user_config,
+    _resolve_default_language,
     _resolve_effort_level,
 )
 
@@ -1671,6 +1675,91 @@ class TestThinkingSettings:
         monkeypatch.setenv("ASKCC_CLAUDE_DISABLE_ADAPTIVE_THINKING", "false")
         result = os.getenv("ASKCC_CLAUDE_DISABLE_ADAPTIVE_THINKING", "true").lower() not in ("0", "false")
         assert result is False
+
+
+class TestDefaultLanguageResolution:
+    """Tests for ASKCC_LANGUAGE env var and ~/.askcc/config.toml default-language resolution."""
+
+    def test_default_language_from_env_var(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("ASKCC_LANGUAGE", "japanese")
+        assert _resolve_default_language(user_config={}) == SupportedLanguage.JAPANESE
+
+    def test_default_language_from_config_file(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+        monkeypatch.delenv("ASKCC_LANGUAGE", raising=False)
+        config_path = tmp_path / "config.toml"
+        config_path.write_text('[defaults]\nlanguage = "japanese"\n')
+        loaded = _load_user_config(config_path)
+        assert _resolve_default_language(user_config=loaded) == SupportedLanguage.JAPANESE
+
+    def test_env_var_overrides_config_file(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("ASKCC_LANGUAGE", "japanese")
+        assert (
+            _resolve_default_language(user_config={"defaults": {"language": "english"}}) == SupportedLanguage.JAPANESE
+        )
+
+    def test_config_file_overrides_builtin_default(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("ASKCC_LANGUAGE", raising=False)
+        assert (
+            _resolve_default_language(user_config={"defaults": {"language": "japanese"}}) == SupportedLanguage.JAPANESE
+        )
+
+    def test_default_language_unset_returns_english(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("ASKCC_LANGUAGE", raising=False)
+        assert _resolve_default_language(user_config={}) == SupportedLanguage.ENGLISH
+
+    def test_invalid_env_value_warns_and_falls_back(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ):
+        monkeypatch.setenv("ASKCC_LANGUAGE", "klingon")
+        with caplog.at_level("WARNING", logger="askcc.settings"):
+            result = _resolve_default_language(user_config={})
+        assert result == SupportedLanguage.ENGLISH
+        assert "Invalid ASKCC_LANGUAGE" in caplog.text
+
+    def test_invalid_config_value_warns_and_falls_back(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ):
+        monkeypatch.delenv("ASKCC_LANGUAGE", raising=False)
+        with caplog.at_level("WARNING", logger="askcc.settings"):
+            result = _resolve_default_language(user_config={"defaults": {"language": "klingon"}})
+        assert result == SupportedLanguage.ENGLISH
+        assert "Invalid [defaults].language" in caplog.text
+
+    def test_missing_config_file_silent(self, tmp_path: Path, caplog: pytest.LogCaptureFixture):
+        with caplog.at_level("WARNING", logger="askcc.settings"):
+            result = _load_user_config(tmp_path / "missing.toml")
+        assert result == {}
+        assert caplog.text == ""
+
+    def test_malformed_toml_warns(self, tmp_path: Path, caplog: pytest.LogCaptureFixture):
+        config_path = tmp_path / "config.toml"
+        config_path.write_text("not = valid = toml\n[broken")
+        with caplog.at_level("WARNING", logger="askcc.settings"):
+            result = _load_user_config(config_path)
+        assert result == {}
+        assert "Failed to read user config" in caplog.text
+
+    def test_user_config_path_uses_askcc_home(self):
+        # USER_CONFIG_PATH must resolve relative to ASKCC_HOME (so ASKCC_HOME overrides apply).
+        assert USER_CONFIG_PATH == ASKCC_HOME / "config.toml"
+
+    def test_cli_flag_overrides_env(self, monkeypatch: pytest.MonkeyPatch):
+        # CLI flag precedence is enforced by argparse — passing --language overrides
+        # whatever DEFAULT_LANGUAGE was resolved to at module import.
+        monkeypatch.setenv("ASKCC_LANGUAGE", "japanese")
+        mock_runner = _mock_runner()
+        issue_url = "https://github.com/monkut/askcc-cli/issues/1"
+        with (
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.validate_issue_labels", return_value=[]),
+            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
+            patch("askcc.cli.get_runner", return_value=mock_runner),
+            patch("sys.argv", ["askcc", "--language", "english", AgentAction.PLAN, "-g", issue_url]),
+            pytest.raises(SystemExit),
+        ):
+            main()
+        prompt = mock_runner.run.call_args[0][0]
+        assert "Output all comments in" not in prompt
 
 
 class TestThinkingCLIFlags:

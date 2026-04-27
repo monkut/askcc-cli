@@ -8,7 +8,7 @@ from pathlib import Path
 from string import Template
 
 from . import __version__, settings
-from .definitions import AgentAction, AgentConfig, SupportedLanguage
+from .definitions import AgentAction, AgentConfig
 from .functions import (
     CheckResult,
     _parse_issue_url,
@@ -27,7 +27,7 @@ from .functions import (
     write_prompt_content,
 )
 from .runners import DEFAULT_RUNNER, RUNNER_REGISTRY, get_runner
-from .settings import VALID_EFFORT_LEVELS, configure_logging
+from .settings import VALID_EFFORT_LEVELS, SupportedLanguage, configure_logging
 
 logger = logging.getLogger(__name__)
 
@@ -123,8 +123,11 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
         "-l",
         "--language",
         choices=[lang.value for lang in SupportedLanguage],
-        default=SupportedLanguage.ENGLISH,
-        help="Language for agent output comments (default: english).",
+        default=settings.DEFAULT_LANGUAGE,
+        help=f"Language for agent output comments. "
+        f"Precedence: CLI > env (ASKCC_LANGUAGE) > user config "
+        f"(~/.askcc/config.toml [defaults].language) > built-in default "
+        f"({SupportedLanguage.ENGLISH}).",
     )
     parser.add_argument(
         "-r",

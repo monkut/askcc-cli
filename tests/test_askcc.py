@@ -279,6 +279,34 @@ class TestDevelopPromptTddContent:
         assert "Write tests for every new or changed behavior" not in DEVELOP_AGENT_PROMPT
 
 
+class TestDevelopPromptTestPlanUpdate:
+    """The develop prompt must update the PR test plan after PR creation (issue #88).
+
+    Assertions are literal-substring matches: prompt-wording changes will surface
+    here intentionally. Don't "fix" them away — update both the prompt and the
+    asserted substrings together, mirroring the TestReviewprPromptMergeGuard precedent.
+    """
+
+    def test_includes_test_plan_update_section_heading(self):
+        assert "Test plan update:" in DEVELOP_AGENT_PROMPT
+
+    def test_includes_pr_body_read_command(self):
+        assert "gh pr view <number> --json body -q .body" in DEVELOP_AGENT_PROMPT
+
+    def test_includes_pr_body_edit_command(self):
+        assert 'gh pr edit <number> --body "<updated body>"' in DEVELOP_AGENT_PROMPT
+
+    def test_includes_manual_verification_carveout(self):
+        assert "manual/external verification" in DEVELOP_AGENT_PROMPT
+        assert "unchecked" in DEVELOP_AGENT_PROMPT
+
+    def test_includes_noop_when_no_test_plan_section(self):
+        assert "If no `## Test plan` section exists, skip this step" in DEVELOP_AGENT_PROMPT
+
+    def test_completion_step_references_test_plan_update(self):
+        assert "Update the test plan checklist in the PR description" in DEVELOP_AGENT_PROMPT
+
+
 class TestReviewprPromptMergeGuard:
     """The pr-review prompt must block merging when CHANGES_REQUESTED reviews exist (issue #86)."""
 

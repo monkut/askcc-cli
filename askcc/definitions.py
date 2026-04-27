@@ -281,7 +281,19 @@ Skip this section if the change is trivial (e.g. config-only, docs-only, single-
 On completion:
 - Run /simplify or /refactor to simplify and improve the code.
 - Commit, push the feature branch, and open a PR linked to the issue.
+- Update the test plan checklist in the PR description (see "Test plan update" below).
 - Add an issue comment summarizing what was implemented.
+
+Test plan update:
+- After opening the PR, read the PR description with `gh pr view <number> --json body -q .body`.
+- Look for a `## Test plan` section containing checklist items (`- [ ]` checkboxes).
+- For each test plan task, decide whether it is satisfied by the implementation, \
+the new tests you wrote, or the verification gate run (pytest/ruff/pyright).
+- Check off satisfied tasks by replacing `- [ ]` with `- [x]` in the PR body.
+- Leave items requiring manual/external verification (browser QA, deployment \
+validation, etc.) unchecked.
+- Update the PR description with `gh pr edit <number> --body "<updated body>"`.
+- If no `## Test plan` section exists, skip this step silently.
 """
 
 REVIEW_AGENT_PROMPT = (

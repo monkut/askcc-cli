@@ -97,8 +97,27 @@ Supporting commands can be used at any point:
 |-------------|--------------------------------------------|---------|
 | `LOG_LEVEL`  | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, etc.) | `INFO`    |
 | `ASKCC_HOME` | Root directory for askcc configuration and templates   | `~/.askcc` |
+| `ASKCC_LANGUAGE` | Default output language for agent comments (`english`, `japanese`) | `english` |
 | `DECISION_ISSUE_LABEL` | GitHub label applied when an agent flags a decision is needed | `needs:decision` |
 | `ENABLE_ISSUE_LABEL_PREFIX_VALIDATION` | Enable/disable issue label prefix validation before agent execution | `true` |
+
+### User Configuration File
+
+askcc reads optional defaults from `~/.askcc/config.toml` (resolved relative to `ASKCC_HOME`):
+
+```toml
+[defaults]
+language = "japanese"
+```
+
+The output language for agent comments resolves in this order (highest wins):
+
+1. CLI flag (`--language`)
+2. Environment variable (`ASKCC_LANGUAGE`)
+3. User config file (`~/.askcc/config.toml` `[defaults] language`)
+4. Built-in default (`english`)
+
+A missing config file is silently ignored. A malformed file or invalid value logs a warning and falls back to the next layer — the CLI never crashes on bad config.
 
 ### Customizing Prompts
 

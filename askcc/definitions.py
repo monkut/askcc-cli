@@ -675,11 +675,6 @@ KNOWN_FRONTMATTER_KEYS: frozenset[str] = frozenset(
 )
 
 
-class SupportedLanguage(StrEnum):
-    ENGLISH = "english"
-    JAPANESE = "japanese"
-
-
 class AgentAction(StrEnum):
     PREPARE = "prepare"
     PLAN = "plan"

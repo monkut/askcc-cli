@@ -1,3 +1,4 @@
+import textwrap
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -200,6 +201,25 @@ FIXCI_CONFIG_BOUNDARIES = (
     "Do not cross these boundaries unless the issue explicitly requests it:\n\n" + CONFIG_BOUNDARIES_BODY
 )
 
+# Shared guidance reused by DEVELOP_AGENT_PROMPT and FIXCI_AGENT_PROMPT so any
+# change pushed to an existing PR triggers a description review/refresh.
+PR_DESCRIPTION_UPDATE_BODY = """\
+- Read the current PR body: `gh pr view <number> --json body -q .body`
+- Refresh the `## Verification` section with current local results (pytest/ruff/pyright).
+- Update the `## Summary` (or equivalent) if user-visible behavior changed.
+- Update `## Key Flows` if control flow, data flow, or state transitions changed.
+- Check off newly satisfied items in `## Test plan`; add new items if behavior expanded.
+- Preserve unrelated content — only edit sections affected by your change.
+- Apply with `gh pr edit <number> --body "<updated body>"`."""
+
+DEVELOP_PR_DESCRIPTION_UPDATE = (
+    "PR description update (when pushing changes to an existing PR):\n" + PR_DESCRIPTION_UPDATE_BODY
+)
+
+FIXCI_PR_DESCRIPTION_UPDATE = "Review and update the PR description to reflect the fix:\n" + textwrap.indent(
+    PR_DESCRIPTION_UPDATE_BODY, "    "
+)
+
 
 # NOTE: develop and fix-ci require write access (Edit/Write/Bash) to actually
 # implement changes and run tests. The runner currently passes
@@ -285,6 +305,9 @@ Security checklist (verify before committing):
 {DEVELOP_CONFIG_BOUNDARIES}
 
 PR description:
+- Reference the originating issue using a GitHub auto-close keyword \
+(`Closes #<issue-number>` or `Fixes #<issue-number>`) in the PR body so the issue \
+links to the PR and closes automatically when merged.
 - Include a `## Key Flows` section with mermaid diagrams illustrating the main flows \
 introduced or changed by this PR. Focus on control flow, data flow, or state transitions \
 that help the reviewer understand the change at a glance. Example:
@@ -305,9 +328,14 @@ Skip this section if the change is trivial (e.g. config-only, docs-only, single-
 
 On completion:
 - Run /simplify or /refactor to simplify and improve the code.
-- Commit, push the feature branch, and open a PR linked to the issue.
+- Commit and push the feature branch.
+- If no PR exists for the branch, open a PR linked to the issue.
+- If a PR already exists (e.g. follow-up changes on the same branch), review and update its \
+description (see "PR description update" below) before posting the issue comment.
 - Update the test plan checklist in the PR description (see "Test plan update" below).
 - Add an issue comment summarizing what was implemented.
+
+{DEVELOP_PR_DESCRIPTION_UPDATE}
 
 Test plan update:
 - After opening the PR, read the PR description with `gh pr view <number> --json body -q .body`.
@@ -629,7 +657,10 @@ Goal: Identify failing CI checks on the current PR or branch and implement fixes
 
 12. Commit all fixes with a descriptive message (e.g. `fix: resolve failing CI checks — <brief description>`).
 13. Push the branch: `git push`
-14. Post a comment on the PR summarizing:
+14. """
+    + FIXCI_PR_DESCRIPTION_UPDATE
+    + """
+15. Post a comment on the PR summarizing:
     - What failures were found (check names, error types)
     - What was fixed (files changed, root cause)
     - Verification steps taken

@@ -308,6 +308,68 @@ class TestDevelopPromptTestPlanUpdate:
         assert "Update the test plan checklist in the PR description" in DEVELOP_AGENT_PROMPT
 
 
+class TestDevelopPromptPrDescriptionUpdate:
+    """The develop prompt must review/update the PR description on changes to an existing PR.
+
+    Assertions are literal-substring matches: prompt-wording changes will surface
+    here intentionally — update both the prompt and the asserted substrings together.
+    """
+
+    def test_includes_pr_description_update_section_heading(self):
+        assert "PR description update (when pushing changes to an existing PR):" in DEVELOP_AGENT_PROMPT
+
+    def test_completion_step_references_existing_pr_review(self):
+        assert "If a PR already exists" in DEVELOP_AGENT_PROMPT
+        assert "review and update its description" in DEVELOP_AGENT_PROMPT
+
+    def test_includes_pr_body_read_command(self):
+        assert "Read the current PR body: `gh pr view <number> --json body -q .body`" in DEVELOP_AGENT_PROMPT
+
+    def test_includes_pr_body_edit_command(self):
+        assert 'Apply with `gh pr edit <number> --body "<updated body>"`' in DEVELOP_AGENT_PROMPT
+
+    def test_includes_verification_refresh_guidance(self):
+        assert "Refresh the `## Verification` section" in DEVELOP_AGENT_PROMPT
+
+    def test_includes_preserve_unrelated_content_rule(self):
+        assert "Preserve unrelated content — only edit sections affected by your change." in DEVELOP_AGENT_PROMPT
+
+
+class TestDevelopPromptIssueReference:
+    """The develop prompt must require a GitHub auto-close keyword in the PR body."""
+
+    def test_includes_close_keyword_guidance(self):
+        assert "Closes #<issue-number>" in DEVELOP_AGENT_PROMPT
+        assert "Fixes #<issue-number>" in DEVELOP_AGENT_PROMPT
+
+    def test_close_keyword_guidance_lives_in_pr_description_section(self):
+        pr_description_index = DEVELOP_AGENT_PROMPT.index("PR description:")
+        on_completion_index = DEVELOP_AGENT_PROMPT.index("On completion:")
+        close_keyword_index = DEVELOP_AGENT_PROMPT.index("Closes #<issue-number>")
+        assert pr_description_index < close_keyword_index < on_completion_index
+
+
+class TestFixciPromptPrDescriptionUpdate:
+    """The fix-ci prompt must review/update the PR description after applying fixes."""
+
+    def test_includes_pr_description_update_step(self):
+        assert "Review and update the PR description to reflect the fix:" in FIXCI_AGENT_PROMPT
+
+    def test_includes_pr_body_read_command(self):
+        assert "Read the current PR body: `gh pr view <number> --json body -q .body`" in FIXCI_AGENT_PROMPT
+
+    def test_includes_pr_body_edit_command(self):
+        assert 'Apply with `gh pr edit <number> --body "<updated body>"`' in FIXCI_AGENT_PROMPT
+
+    def test_includes_verification_refresh_guidance(self):
+        assert "Refresh the `## Verification` section" in FIXCI_AGENT_PROMPT
+
+    def test_step_ordering_places_update_before_summary_comment(self):
+        update_index = FIXCI_AGENT_PROMPT.index("Review and update the PR description")
+        comment_index = FIXCI_AGENT_PROMPT.index("Post a comment on the PR summarizing")
+        assert update_index < comment_index
+
+
 class TestReviewprPromptMergeGuard:
     """The pr-review prompt must block merging when CHANGES_REQUESTED reviews exist (issue #86)."""
 

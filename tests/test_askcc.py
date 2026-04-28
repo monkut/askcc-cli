@@ -305,7 +305,7 @@ class TestDevelopPromptTestPlanUpdate:
         assert "If no `## Test plan` section exists, skip this step" in DEVELOP_AGENT_PROMPT
 
     def test_completion_step_references_test_plan_update(self):
-        assert "Update the test plan checklist in the PR description" in DEVELOP_AGENT_PROMPT
+        assert 'Update the test plan checklist (see "Test plan update")' in DEVELOP_AGENT_PROMPT
 
 
 class TestDevelopPromptPrDescriptionUpdate:
@@ -319,20 +319,20 @@ class TestDevelopPromptPrDescriptionUpdate:
         assert "PR description update (when pushing changes to an existing PR):" in DEVELOP_AGENT_PROMPT
 
     def test_completion_step_references_existing_pr_review(self):
-        assert "If a PR already exists" in DEVELOP_AGENT_PROMPT
+        assert "If a PR exists" in DEVELOP_AGENT_PROMPT
         assert "review and update its description" in DEVELOP_AGENT_PROMPT
 
     def test_includes_pr_body_read_command(self):
-        assert "Read the current PR body: `gh pr view <number> --json body -q .body`" in DEVELOP_AGENT_PROMPT
+        assert "Read current PR body: `gh pr view <number> --json body -q .body`" in DEVELOP_AGENT_PROMPT
 
     def test_includes_pr_body_edit_command(self):
-        assert 'Apply with `gh pr edit <number> --body "<updated body>"`' in DEVELOP_AGENT_PROMPT
+        assert 'Apply: `gh pr edit <number> --body "<updated body>"`' in DEVELOP_AGENT_PROMPT
 
     def test_includes_verification_refresh_guidance(self):
-        assert "Refresh the `## Verification` section" in DEVELOP_AGENT_PROMPT
+        assert "Refresh `## Verification`" in DEVELOP_AGENT_PROMPT
 
     def test_includes_preserve_unrelated_content_rule(self):
-        assert "Preserve unrelated content — only edit sections affected by your change." in DEVELOP_AGENT_PROMPT
+        assert "Preserve unrelated content — only edit affected sections." in DEVELOP_AGENT_PROMPT
 
 
 class TestDevelopPromptIssueReference:
@@ -356,17 +356,17 @@ class TestFixciPromptPrDescriptionUpdate:
         assert "Review and update the PR description to reflect the fix:" in FIXCI_AGENT_PROMPT
 
     def test_includes_pr_body_read_command(self):
-        assert "Read the current PR body: `gh pr view <number> --json body -q .body`" in FIXCI_AGENT_PROMPT
+        assert "Read current PR body: `gh pr view <number> --json body -q .body`" in FIXCI_AGENT_PROMPT
 
     def test_includes_pr_body_edit_command(self):
-        assert 'Apply with `gh pr edit <number> --body "<updated body>"`' in FIXCI_AGENT_PROMPT
+        assert 'Apply: `gh pr edit <number> --body "<updated body>"`' in FIXCI_AGENT_PROMPT
 
     def test_includes_verification_refresh_guidance(self):
-        assert "Refresh the `## Verification` section" in FIXCI_AGENT_PROMPT
+        assert "Refresh `## Verification`" in FIXCI_AGENT_PROMPT
 
     def test_step_ordering_places_update_before_summary_comment(self):
         update_index = FIXCI_AGENT_PROMPT.index("Review and update the PR description")
-        comment_index = FIXCI_AGENT_PROMPT.index("Post a comment on the PR summarizing")
+        comment_index = FIXCI_AGENT_PROMPT.index("Comment on the PR summarizing")
         assert update_index < comment_index
 
 

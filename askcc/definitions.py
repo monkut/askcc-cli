@@ -152,16 +152,25 @@ Analyze description and comment history to understand what's been discussed, dec
 (e.g., answers to prepare-step questions).
 
 Rewrite the issue body to be development-ready: `gh issue edit <url> --body "<updated body>"`. \
-The body should define what needs to be built, incorporating decisions from comments. Include:
+The body MUST contain all of the following sections — add any that are missing:
 
-1. **Acceptance Criteria** — replace any existing `## Acceptance Criteria` section \
-(including `<!-- draft -->` variants) with a finalized `## Acceptance Criteria` `- [ ]` checklist \
-derived from your plan.
-2. **Dependencies** — replace any existing `## Dependencies` section (including `<!-- draft -->` \
-variants) with a finalized list. If none, include the heading with "None identified."
-3. **Implementation Plan** — add `## Implementation Plan` with step-by-step tasks referencing \
+1. **Acceptance Criteria** — `## Acceptance Criteria` heading with at least one `- [ ]` \
+checklist item derived from your plan. Replace any existing section (including `<!-- draft -->` \
+variants); rename non-canonical headings like `## Tasks` or `## Requirements`.
+2. **Dependencies** — `## Dependencies` heading. Replace any existing section (including \
+`<!-- draft -->` variants); if none, use "None identified."
+3. **Implementation Plan** — `## Implementation Plan` with step-by-step tasks referencing \
 specific files and functions.
-4. **Assignee** — assign to the authenticated user: `gh issue edit <url> --add-assignee "@me"`.
+4. **Assignee** — assign the authenticated user: `gh issue edit <url> --add-assignee "@me"`.
+
+Keep prose concise; prefer bullet lists over paragraphs.
+
+## Post-Update Verification
+
+Re-read the body (`gh issue view <url> --json body -q .body`) and confirm both \
+`## Acceptance Criteria` (with a `- [ ]` checklist item) and `## Dependencies` (or \
+Prerequisites/Context/Blockers) headings are present. Re-edit and re-verify until both pass — \
+`develop` rejects the issue otherwise.
 
 ## Summary Comment
 

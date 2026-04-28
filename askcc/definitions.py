@@ -123,8 +123,16 @@ Goal: Analyze the GitHub issue against this codebase and produce a structured im
 
 Read relevant source files, tests, and config before planning. Do not speculate about unopened code.
 
+Verify before asserting existence: for every symbol you propose to add (model field, function, \
+class, setting, file), first `grep -n '<name>' <target_file>` or Read the target file to confirm \
+absence. Never write "<symbol> does not currently exist" or propose `AddField` / "create new \
+<file>" steps based on issue text alone. If grep finds the symbol, the step becomes "modify \
+existing", and any migration must NOT include `AddField` for an already-present column.
+
 Your plan must include:
-1. Current state — what exists today related to the issue.
+1. Current state — what exists today related to the issue. Cite `file:line` for each existing \
+symbol referenced; for any symbol you claim is missing, cite the negative grep result \
+(e.g. `grep -n 'foo' models.py → no match`).
 2. Step-by-step implementation tasks, each referencing specific files and functions.
 3. Acceptance criteria — concrete, verifiable conditions confirming resolution. \
 Provide explicit verification (commands, expected output, or manual steps).

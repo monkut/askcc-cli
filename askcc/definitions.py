@@ -154,23 +154,23 @@ Analyze description and comment history to understand what's been discussed, dec
 Rewrite the issue body to be development-ready: `gh issue edit <url> --body "<updated body>"`. \
 The body MUST contain all of the following sections — add any that are missing:
 
-1. **Acceptance Criteria** — the body MUST contain a `## Acceptance Criteria` heading with at \
-least one `- [ ]` checklist item derived from your plan. If a section exists (including \
-`<!-- draft -->` variants), replace it; otherwise add it. Rename non-canonical headings like \
-`## Tasks` or `## Requirements` to `## Acceptance Criteria` rather than leaving them.
-2. **Dependencies** — the body MUST contain a `## Dependencies` heading. Replace any existing \
-one (including `<!-- draft -->` variants); if none exists, add it with "None identified."
-3. **Implementation Plan** — add `## Implementation Plan` with step-by-step tasks referencing \
+1. **Acceptance Criteria** — `## Acceptance Criteria` heading with at least one `- [ ]` \
+checklist item derived from your plan. Replace any existing section (including `<!-- draft -->` \
+variants); rename non-canonical headings like `## Tasks` or `## Requirements`.
+2. **Dependencies** — `## Dependencies` heading. Replace any existing section (including \
+`<!-- draft -->` variants); if none, use "None identified."
+3. **Implementation Plan** — `## Implementation Plan` with step-by-step tasks referencing \
 specific files and functions.
-4. **Assignee** — assign to the authenticated user: `gh issue edit <url> --add-assignee "@me"`.
+4. **Assignee** — assign the authenticated user: `gh issue edit <url> --add-assignee "@me"`.
+
+Keep prose concise; prefer bullet lists over paragraphs.
 
 ## Post-Update Verification
 
-After editing, re-read the body (`gh issue view <url> --json body -q .body`) and confirm it \
-contains both a `## Acceptance Criteria` heading with at least one `- [ ]` checklist item AND a \
-`## Dependencies` (or Prerequisites/Context/Blockers) heading. If either check fails, re-edit \
-the body and re-verify. Do not stop until both are present — `develop` will reject the issue \
-otherwise.
+Re-read the body (`gh issue view <url> --json body -q .body`) and confirm both \
+`## Acceptance Criteria` (with a `- [ ]` checklist item) and `## Dependencies` (or \
+Prerequisites/Context/Blockers) headings are present. Re-edit and re-verify until both pass — \
+`develop` rejects the issue otherwise.
 
 ## Summary Comment
 

@@ -123,8 +123,14 @@ Goal: Analyze the GitHub issue against this codebase and produce a structured im
 
 Read relevant source files, tests, and config before planning. Do not speculate about unopened code.
 
+For any change proposal, assert that the change does not already exist. Verify with `grep -n` \
+or by reading the target file before claiming any symbol or file is missing or proposing to \
+add it. If it already exists, the step becomes "modify existing" rather than "add new".
+
 Your plan must include:
-1. Current state — what exists today related to the issue.
+1. Current state — what exists today related to the issue. Cite `file:line` for each existing \
+symbol referenced; for any symbol you claim is missing, cite the negative grep result \
+(e.g. `grep -n 'foo' models.py → no match`).
 2. Step-by-step implementation tasks, each referencing specific files and functions.
 3. Acceptance criteria — concrete, verifiable conditions confirming resolution. \
 Provide explicit verification (commands, expected output, or manual steps).

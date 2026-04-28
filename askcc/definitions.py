@@ -152,16 +152,25 @@ Analyze description and comment history to understand what's been discussed, dec
 (e.g., answers to prepare-step questions).
 
 Rewrite the issue body to be development-ready: `gh issue edit <url> --body "<updated body>"`. \
-The body should define what needs to be built, incorporating decisions from comments. Include:
+The body MUST contain all of the following sections — add any that are missing:
 
-1. **Acceptance Criteria** — replace any existing `## Acceptance Criteria` section \
-(including `<!-- draft -->` variants) with a finalized `## Acceptance Criteria` `- [ ]` checklist \
-derived from your plan.
-2. **Dependencies** — replace any existing `## Dependencies` section (including `<!-- draft -->` \
-variants) with a finalized list. If none, include the heading with "None identified."
+1. **Acceptance Criteria** — the body MUST contain a `## Acceptance Criteria` heading with at \
+least one `- [ ]` checklist item derived from your plan. If a section exists (including \
+`<!-- draft -->` variants), replace it; otherwise add it. Rename non-canonical headings like \
+`## Tasks` or `## Requirements` to `## Acceptance Criteria` rather than leaving them.
+2. **Dependencies** — the body MUST contain a `## Dependencies` heading. Replace any existing \
+one (including `<!-- draft -->` variants); if none exists, add it with "None identified."
 3. **Implementation Plan** — add `## Implementation Plan` with step-by-step tasks referencing \
 specific files and functions.
 4. **Assignee** — assign to the authenticated user: `gh issue edit <url> --add-assignee "@me"`.
+
+## Post-Update Verification
+
+After editing, re-read the body (`gh issue view <url> --json body -q .body`) and confirm it \
+contains both a `## Acceptance Criteria` heading with at least one `- [ ]` checklist item AND a \
+`## Dependencies` (or Prerequisites/Context/Blockers) heading. If either check fails, re-edit \
+the body and re-verify. Do not stop until both are present — `develop` will reject the issue \
+otherwise.
 
 ## Summary Comment
 

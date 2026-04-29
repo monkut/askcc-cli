@@ -393,6 +393,55 @@ class TestReviewprPromptMergeGuard:
         assert "Pre-merge guard" in REVIEWPR_AGENT_PROMPT
 
 
+class TestReviewprPromptDedupGuard:
+    """The pr-review prompt must skip duplicate reviews when no new commits since last review (issue #100).
+
+    Assertions are literal-substring matches: prompt-wording changes will surface
+    here intentionally — update both the prompt and the asserted substrings together,
+    mirroring the TestReviewprPromptMergeGuard precedent.
+    """
+
+    def test_includes_pre_review_dedup_heading(self):
+        assert "Pre-review dedup" in REVIEWPR_AGENT_PROMPT
+
+    def test_includes_dedup_check_command(self):
+        assert "sort_by(.committedDate)" in REVIEWPR_AGENT_PROMPT
+        assert '.author.login == "ellen-goc"' in REVIEWPR_AGENT_PROMPT
+        assert "(.body|length > 50)" in REVIEWPR_AGENT_PROMPT
+        assert "--json reviews,commits" in REVIEWPR_AGENT_PROMPT
+
+    def test_includes_skip_instruction(self):
+        assert "skip entirely" in REVIEWPR_AGENT_PROMPT
+
+    def test_dedup_guard_placed_before_pre_merge_guard(self):
+        assert REVIEWPR_AGENT_PROMPT.index("Pre-review dedup") < REVIEWPR_AGENT_PROMPT.index("Pre-merge guard")
+
+
+class TestReviewprPromptNoLinkedIssueComment:
+    """The pr-review prompt must not unconditionally post a linked-issue comment (issue #100)."""
+
+    def test_does_not_post_linked_issue_comment(self):
+        assert "Also post a brief summary on the linked issue" not in REVIEWPR_AGENT_PROMPT
+
+
+class TestDevelopPromptConditionalIssueComment:
+    """The develop prompt must only comment on the issue when opening a new PR (issue #100).
+
+    Assertions are literal-substring matches: prompt-wording changes will surface
+    here intentionally — update both the prompt and the asserted substrings together.
+    """
+
+    def test_does_not_unconditionally_comment_on_issue(self):
+        assert "- Comment on the issue summarizing what was implemented." not in DEVELOP_AGENT_PROMPT
+
+    def test_includes_new_pr_branch(self):
+        assert "If this session opened a new PR" in DEVELOP_AGENT_PROMPT
+
+    def test_includes_existing_pr_skip_branch(self):
+        assert "PR already existed" in DEVELOP_AGENT_PROMPT
+        assert "PR description update is sufficient" in DEVELOP_AGENT_PROMPT
+
+
 class TestConfigBoundaryConstraints:
     """Both develop and fix-ci prompts must forbid relaxing linter/type-checker config (issue #89)."""
 

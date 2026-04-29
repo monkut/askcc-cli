@@ -330,7 +330,9 @@ On completion:
 - If no PR exists, open one linked to the issue.
 - If a PR exists (follow-up changes), review and update its description (see "PR description update") before commenting.
 - Update the test plan checklist (see "Test plan update").
-- Comment on the issue summarizing what was implemented.
+- If this session opened a new PR: comment on the issue summarizing what was implemented.
+- If a PR already existed before this session (follow-up commits): skip the issue comment \
+— the PR description update is sufficient.
 
 {DEVELOP_PR_DESCRIPTION_UPDATE}
 
@@ -522,6 +524,14 @@ Pre-review:
 - Check out the PR branch: `gh pr checkout <number>`.
 - Run the test suite to confirm all tests pass.
 
+Pre-review dedup (skip if already reviewed since last push):
+- `gh pr view <number> -R <owner/repo> --json reviews,commits \
+--jq '{last_commit: (.commits | sort_by(.committedDate) | last | .committedDate), \
+last_review: ([.reviews[] | select(.author.login == "ellen-goc" and (.body|length > 50)) \
+| .submittedAt] | sort | last // "")}'`
+- If `last_review` is non-empty AND `last_review >= last_commit` → skip entirely \
+(no review, no linked-issue comment). Stop immediately.
+
 Pre-merge guard (CHANGES_REQUESTED):
 - Before merging, check for unresolved CHANGES_REQUESTED reviews: \
 `gh pr view <number> -R <owner/repo> --json reviews --jq '[.reviews[] | select(.state == "CHANGES_REQUESTED")]'`.
@@ -546,7 +556,6 @@ Your review must include:
 Posting the review:
 - All pass: `gh pr review <number> -R <owner/repo> --approve --body "<review>"`
 - Any fail: `gh pr review <number> -R <owner/repo> --request-changes --body "<review>"`
-- Also post a brief summary on the linked issue: `gh issue comment`.
 
 Update test plan in PR description:
 - Read PR body: `gh pr view <number> -R <owner/repo> --json body -q .body`.

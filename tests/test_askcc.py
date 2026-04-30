@@ -394,12 +394,7 @@ class TestReviewprPromptMergeGuard:
 
 
 class TestReviewprPromptDedupGuard:
-    """The pr-review prompt must skip duplicate reviews when no new commits since last review (issue #100).
-
-    Assertions are literal-substring matches: prompt-wording changes will surface
-    here intentionally — update both the prompt and the asserted substrings together,
-    mirroring the TestReviewprPromptMergeGuard precedent.
-    """
+    """The pr-review prompt must skip duplicate reviews when no new commits since last review (issue #100)."""
 
     def test_includes_pre_review_dedup_heading(self):
         assert "Pre-review dedup" in REVIEWPR_AGENT_PROMPT
@@ -425,11 +420,7 @@ class TestReviewprPromptNoLinkedIssueComment:
 
 
 class TestDevelopPromptConditionalIssueComment:
-    """The develop prompt must only comment on the issue when opening a new PR (issue #100).
-
-    Assertions are literal-substring matches: prompt-wording changes will surface
-    here intentionally — update both the prompt and the asserted substrings together.
-    """
+    """The develop prompt must only comment on the issue when opening a new PR (issue #100)."""
 
     def test_does_not_unconditionally_comment_on_issue(self):
         assert "- Comment on the issue summarizing what was implemented." not in DEVELOP_AGENT_PROMPT

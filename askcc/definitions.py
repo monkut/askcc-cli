@@ -332,7 +332,7 @@ On completion:
 - Run /simplify or /refactor to improve the code.
 - Commit and push the feature branch.
 - If no PR exists, open one linked to the issue.
-- If a PR exists (follow-up changes), review and update its description (see "PR description update") before commenting.
+- If a PR exists (follow-up changes), review and update its description (see "PR description update").
 - Update the test plan checklist (see "Test plan update").
 - If this session opened a new PR: comment on the issue summarizing what was implemented.
 - If a PR already existed before this session (follow-up commits): skip the issue comment \

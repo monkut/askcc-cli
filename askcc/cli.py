@@ -26,7 +26,7 @@ from .functions import (
     validate_issue_readiness,
     write_prompt_content,
 )
-from .runners import DEFAULT_RUNNER, RUNNER_REGISTRY, get_runner
+from .runners import DEFAULT_RUNNER, RUNNER_REGISTRY, OAuthTokenNotFoundError, get_runner
 from .settings import VALID_EFFORT_LEVELS, SupportedLanguage, configure_logging
 
 logger = logging.getLogger(__name__)
@@ -286,16 +286,20 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
     effort_level = _resolve_effort(args.effort, config.effort)
     max_thinking_tokens = _resolve_max_thinking_tokens(args.max_thinking_tokens, config.max_thinking_tokens)
     try:
-        return_code, usage = runner.run(
-            prompt,
-            config=config,
-            issue_url=issue_url,
-            cwd=cwd,
-            effort_level=effort_level,
-            max_thinking_tokens=max_thinking_tokens,
-            disable_thinking=args.disable_thinking,
-            disable_adaptive_thinking=args.disable_adaptive_thinking,
-        )
+        try:
+            return_code, usage = runner.run(
+                prompt,
+                config=config,
+                issue_url=issue_url,
+                cwd=cwd,
+                effort_level=effort_level,
+                max_thinking_tokens=max_thinking_tokens,
+                disable_thinking=args.disable_thinking,
+                disable_adaptive_thinking=args.disable_adaptive_thinking,
+            )
+        except OAuthTokenNotFoundError as e:
+            logger.error("[%s] %s", issue_url, e)  # noqa: TRY400
+            sys.exit(1)
     finally:
         # Clean up /tmp files created by _build_prompt (not user templates)
         for f in prompt_tempfiles:

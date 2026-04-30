@@ -1,6 +1,6 @@
 # askcc
 
-A one-shot Claude Code CLI executor that fetches a GitHub issue and pipes it to [Claude Code](https://claude.ai) with a specialized agent prompt.
+Drives [Claude Code](https://claude.ai) through the GitHub issue → PR lifecycle. Each subcommand fetches an issue, applies a phase-specific agent prompt, and runs `claude` non-interactively against your repo.
 
 ## Requirements
 
@@ -30,10 +30,10 @@ uvx --from . --python 3.14 askcc --help
 ## Usage
 
 ```
-askcc [--cwd DIR] {prepare,plan,validate,develop,issue-review,pr-review,explore,diagnose,fix-ci} --github-issue-url URL
-askcc fix-ci [--cwd DIR] [--github-issue-url URL]
-askcc install [--directory DIR]
+askcc [GLOBAL OPTIONS] COMMAND [COMMAND OPTIONS]
 ```
+
+Run `askcc --help` or `askcc COMMAND --help` for the full flag list.
 
 ### Commands
 
@@ -83,48 +83,56 @@ Supporting commands can be used at any point:
 
 ### Options
 
-| Option               | Description                                              |
-|----------------------|----------------------------------------------------------|
-| `--github-issue-url` | **(required)** GitHub issue URL to process               |
-| `--cwd`              | Working directory for the Claude subprocess (default: cwd) |
-| `--skip-validation`  | Skip readiness validation before development (`develop` only) |
-| `--directory`        | Override auto-detection and install skills to this directory (`install` only) |
-| `--version`          | Show version                                             |
+Global options (before the command):
+
+| Option | Description |
+|---|---|
+| `--cwd DIR` | Working directory for the `claude` subprocess (default: cwd) |
+| `-i`, `--ignore-labels` | Bypass `action:` label prefix validation |
+| `-l`, `--language` | Output language for agent comments (`english`, `japanese`) |
+| `-r`, `--runner` | Runner to execute the task (default: `claude`) |
+| `--effort` | Claude thinking effort (`low`, `medium`, `high`, `xhigh`, `max`) |
+| `--max-thinking-tokens N` | Thinking token budget |
+| `--disable-thinking` | Force-disable extended thinking |
+| `--[no-]disable-adaptive-thinking` | Toggle adaptive reasoning (Opus 4.6, Sonnet 4.6) |
+| `--version` | Show version |
+
+Command-specific options:
+
+| Command | Option | Description |
+|---|---|---|
+| (most) | `-g`, `--github-issue-url URL` | **(required)** GitHub issue URL |
+| `develop` | `--skip-validation` | Skip readiness validation before running |
+| `fix-ci` | `-g`, `--github-issue-url URL` | Optional — auto-detected from current branch's PR if omitted |
+| `install` | `--directory DIR` | Override auto-detection of `~/.claude` and `~/.openclaw` targets |
 
 ### Environment Variables
 
-| Variable    | Description                                | Default |
-|-------------|--------------------------------------------|---------|
-| `LOG_LEVEL`  | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, etc.) | `INFO`    |
-| `ASKCC_HOME` | Root directory for askcc configuration and templates   | `~/.askcc` |
+| Variable | Description | Default |
+|---|---|---|
+| `LOG_LEVEL` | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, etc.) | `INFO` |
+| `ASKCC_HOME` | Root directory for askcc configuration, templates, and logs | `~/.askcc` |
 | `ASKCC_LANGUAGE` | Default output language for agent comments (`english`, `japanese`) | `english` |
-| `DECISION_ISSUE_LABEL` | GitHub label applied when an agent flags a decision is needed | `needs:decision` |
-| `ENABLE_ISSUE_LABEL_PREFIX_VALIDATION` | Enable/disable issue label prefix validation before agent execution | `true` |
-| `CLAUDE_CODE_OAUTH_TOKEN` | Claude Code OAuth token used by the spawned `claude` subprocess | (none) |
-| `CLAUDE_OAUTH_TOKEN_FILE` | Path to a file containing the OAuth token. Read when `CLAUDE_CODE_OAUTH_TOKEN` is unset/empty | (none) |
+| `ASKCC_CLAUDE_EFFORT_LEVEL` | Default thinking effort (`low`, `medium`, `high`, `xhigh`, `max`) | `xhigh` |
+| `ASKCC_CLAUDE_MAX_THINKING_TOKENS` | Thinking token budget | `21000` |
+| `ASKCC_CLAUDE_DISABLE_THINKING` | Force-disable extended thinking (`1`/`true`) | `false` |
+| `ASKCC_CLAUDE_DISABLE_ADAPTIVE_THINKING` | Disable adaptive reasoning (Opus 4.6, Sonnet 4.6) | `true` |
+| `DECISION_ISSUE_LABEL` | Label an agent applies when a decision is needed | `needs:decision` |
+| `ENABLE_ISSUE_LABEL_PREFIX_VALIDATION` | Toggle `action:` label prefix validation | `true` |
+| `CLAUDE_CODE_OAUTH_TOKEN` | OAuth token forwarded to the `claude` subprocess | (none) |
+| `CLAUDE_OAUTH_TOKEN_FILE` | Path to a file holding the OAuth token (used when `CLAUDE_CODE_OAUTH_TOKEN` is unset) | (none) |
 
 ### Authentication
 
-Before invoking the `claude` subprocess, askcc resolves the OAuth token via the
-following discovery chain. The first source that produces a non-empty token wins;
-the chosen source is logged at `INFO` level so failures are diagnosable from the
-run log alone.
+askcc resolves the Claude OAuth token before spawning `claude`, using the first non-empty source:
 
-1. `CLAUDE_CODE_OAUTH_TOKEN` environment variable (no log when used).
-2. `CLAUDE_OAUTH_TOKEN_FILE` environment variable — read the file at that path.
-3. `~/.tokens/.claude-oauth-token` — conventional headless token file used by
-   `~/.bashrc` to populate the env var for interactive shells.
-4. `${XDG_CONFIG_HOME:-~/.config}/claude/oauth-token` — XDG-compliant fallback.
-5. `~/.claude/.credentials.json` — last-resort parse of `claudeAiOauth.accessToken`.
-   A `WARNING` is logged when this source is used because Claude Code refreshes
-   its access token in RAM and may not write back, so the file can be stale.
+1. `CLAUDE_CODE_OAUTH_TOKEN` env var (no log when used).
+2. `CLAUDE_OAUTH_TOKEN_FILE` env var — file path.
+3. `~/.tokens/.claude-oauth-token` — conventional headless token file.
+4. `${XDG_CONFIG_HOME:-~/.config}/claude/oauth-token` — XDG fallback.
+5. `~/.claude/.credentials.json` — parses `claudeAiOauth.accessToken`. Logged at `WARNING` because Claude Code refreshes the in-RAM token without always writing back, so this file can be stale.
 
-If none of the sources produce a non-empty token, askcc exits non-zero with an
-error listing every location that was checked, **without** invoking `claude`.
-
-Whitespace around file contents is stripped. Unreadable token files
-(`PermissionError`) and malformed `.credentials.json` files emit a `WARNING` and
-the chain continues to the next source.
+The chosen source is logged at `INFO` so failures are diagnosable from the run log. Whitespace is stripped. Unreadable files (`PermissionError`) or malformed `.credentials.json` log a `WARNING` and the chain continues. If every source is empty, askcc exits non-zero listing each location checked, **without** invoking `claude`.
 
 ### User Configuration File
 
@@ -146,30 +154,13 @@ A missing config file is silently ignored. A malformed file or invalid value log
 
 ### Customizing Prompts
 
-On first run, askcc creates `~/.askcc/templates/` with default template files:
+On first run, askcc seeds `~/.askcc/templates/` with two files per agent: `{ACTION}_SYSTEM_PROMPT.md` (system prompt) and `{ACTION}_USER_PROMPT.md` (user prompt). Edit either file to customize behavior.
 
-| File                       | Required variables | Description                          |
-|----------------------------|--------------------|--------------------------------------|
-| `PREPARE_SYSTEM_PROMPT.md`   | —                  | System prompt for the prepare agent    |
-| `PREPARE_USER_PROMPT.md`     | `$issue_content_file`   | User prompt template for preparation   |
-| `PLAN_SYSTEM_PROMPT.md`      | —                  | System prompt for the planning agent   |
-| `PLAN_USER_PROMPT.md`        | `$issue_content_file`   | User prompt template for planning      |
-| `DEVELOP_SYSTEM_PROMPT.md`   | —                  | System prompt for the dev agent        |
-| `DEVELOP_USER_PROMPT.md`     | `$issue_content_file`   | User prompt template for development   |
-| `REVIEW_SYSTEM_PROMPT.md`    | —                  | System prompt for the issue-review agent |
-| `REVIEW_USER_PROMPT.md`      | `$issue_content_file`   | User prompt template for issue-review    |
-| `REVIEWPR_SYSTEM_PROMPT.md`  | —                  | System prompt for the pr-review agent  |
-| `REVIEWPR_USER_PROMPT.md`    | `$issue_content_file`, `$pr_content_file` | User prompt template for PR review |
-| `EXPLORE_SYSTEM_PROMPT.md`   | —                  | System prompt for the explore agent    |
-| `EXPLORE_USER_PROMPT.md`     | `$issue_content_file`   | User prompt template for exploration   |
-| `DIAGNOSE_SYSTEM_PROMPT.md`  | —                  | System prompt for the diagnose agent   |
-| `DIAGNOSE_USER_PROMPT.md`    | `$issue_content_file`   | User prompt template for diagnosis     |
-| `FIXCI_SYSTEM_PROMPT.md`     | —                  | System prompt for the fix-ci agent     |
-| `FIXCI_USER_PROMPT.md`       | `$issue_content_file`   | User prompt template for CI fixing     |
+Action prefixes: `PREPARE`, `PLAN`, `DEVELOP`, `REVIEW` (issue-review), `REVIEWPR` (pr-review), `EXPLORE`, `DIAGNOSE`, `FIXCI`.
 
-Edit any file to customize the agent's behavior. User prompt templates **must** contain the `$issue_content_file` variable, which is replaced with the path to a tempfile containing the fetched GitHub issue content at runtime. The tempfile is written to `/tmp` with the naming convention `askcc_{COMMAND}_{OWNER}-{REPO}_{ISSUE#}.md` and is automatically cleaned up after execution. askcc validates required variables on startup and raises an error if one is missing.
+User prompt templates **must** include the `$issue_content_file` variable; the `REVIEWPR_USER_PROMPT.md` template additionally requires `$pr_content_file`. Both expand at runtime to tempfile paths under `/tmp/askcc_{COMMAND}_{OWNER}-{REPO}_{ISSUE#}.md`, populated with the fetched issue/PR content and cleaned up after the run. Missing required variables raise an error at startup.
 
-Override the config directory by setting the `ASKCC_HOME` environment variable (e.g. for testing).
+Override the templates directory via `ASKCC_HOME`.
 
 #### Subagent Frontmatter
 
@@ -315,13 +306,15 @@ Both targets are installed if both directories exist. Use `--directory` to overr
 ```
 askcc/
     __init__.py          # Package version
-    cli.py               # CLI entry point and subprocess execution
-    definitions.py       # Agent types, prompts, and config
-    functions.py         # GitHub issue fetching via gh CLI
-    settings.py          # Configuration and environment variables
+    cli.py               # Argparse entry point and command dispatch
+    definitions.py       # Agent actions, default prompts, frontmatter parsing
+    functions.py         # GitHub issue/PR fetching, label and project transitions
+    runners.py           # Runner registry; spawns the `claude` subprocess
+    settings.py          # Configuration, env vars, language/effort resolution
+    skills/              # Bundled skills installed by `askcc install`
 tests/
-    test_askcc.py        # Tests for URL parsing
-pyproject.toml           # Project metadata and tool config
+    test_askcc.py        # Test suite
+pyproject.toml           # Project metadata, ruff/poe/pyright config
 ```
 
 ## Development

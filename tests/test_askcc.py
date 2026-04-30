@@ -50,9 +50,6 @@ from askcc.runners import (
     OAUTH_TOKEN_FILE_ENV,
     ClaudeRunner,
     OAuthTokenNotFoundError,
-    _read_credentials_json,
-    _read_token_file,
-    _resolve_oauth_token,
     get_runner,
 )
 from askcc.settings import (
@@ -2175,6 +2172,10 @@ class TestClaudeRunnerThinkingOptions:
 class TestResolveOAuthToken:
     """Tests for the OAuth token discovery chain."""
 
+    @pytest.fixture
+    def runner(self) -> ClaudeRunner:
+        return ClaudeRunner()
+
     @pytest.fixture(autouse=True)
     def _isolate_env(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.delenv(OAUTH_TOKEN_ENV, raising=False)
@@ -2183,61 +2184,68 @@ class TestResolveOAuthToken:
         monkeypatch.setattr("askcc.runners.CONVENTIONAL_TOKEN_FILE", tmp_path / "missing-conventional")
         monkeypatch.setattr("askcc.runners.CREDENTIALS_JSON_FILE", tmp_path / "missing-credentials.json")
 
-    def test_env_var_present_no_fallback_used(self, monkeypatch: pytest.MonkeyPatch):
+    def test_env_var_present_no_fallback_used(self, runner: ClaudeRunner, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv(OAUTH_TOKEN_ENV, "env-token")  # noqa: S105
-        with patch("askcc.runners._read_token_file") as mock_read:
-            token, source = _resolve_oauth_token()
+        with patch.object(runner, "_read_token_file") as mock_read:
+            token, source = runner._resolve_oauth_token()
         assert token == "env-token"  # noqa: S105
         assert source == f"env {OAUTH_TOKEN_ENV}"
         mock_read.assert_not_called()
 
-    def test_env_var_empty_falls_through(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    def test_env_var_empty_falls_through(self, runner: ClaudeRunner, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
         monkeypatch.setenv(OAUTH_TOKEN_ENV, "   ")
         token_file = tmp_path / "token"
         token_file.write_text("file-token")
         monkeypatch.setenv(OAUTH_TOKEN_FILE_ENV, str(token_file))
-        token, source = _resolve_oauth_token()
+        token, source = runner._resolve_oauth_token()
         assert token == "file-token"  # noqa: S105
         assert OAUTH_TOKEN_FILE_ENV in source
 
-    def test_token_file_env_var_used_when_main_env_missing(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    def test_token_file_env_var_used_when_main_env_missing(
+        self, runner: ClaudeRunner, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
         token_file = tmp_path / "custom-token"
         token_file.write_text("custom-token-value")
         monkeypatch.setenv(OAUTH_TOKEN_FILE_ENV, str(token_file))
-        token, source = _resolve_oauth_token()
+        token, source = runner._resolve_oauth_token()
         assert token == "custom-token-value"  # noqa: S105
         assert str(token_file) in source
         assert OAUTH_TOKEN_FILE_ENV in source
 
-    def test_conventional_path_used_when_envs_missing(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    def test_conventional_path_used_when_envs_missing(
+        self, runner: ClaudeRunner, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
         conventional = tmp_path / "conventional"
         conventional.write_text("conventional-token")
         monkeypatch.setattr("askcc.runners.CONVENTIONAL_TOKEN_FILE", conventional)
-        token, source = _resolve_oauth_token()
+        token, source = runner._resolve_oauth_token()
         assert token == "conventional-token"  # noqa: S105
         assert str(conventional) in source
 
-    def test_xdg_path_used(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    def test_xdg_path_used(self, runner: ClaudeRunner, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
         xdg_dir = tmp_path / "xdg"
         (xdg_dir / "claude").mkdir(parents=True)
         (xdg_dir / "claude" / "oauth-token").write_text("xdg-token")
         monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg_dir))
-        token, source = _resolve_oauth_token()
+        token, source = runner._resolve_oauth_token()
         assert token == "xdg-token"  # noqa: S105
         assert "oauth-token" in source
 
-    def test_xdg_path_default_when_xdg_unset(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    def test_xdg_path_default_when_xdg_unset(
+        self, runner: ClaudeRunner, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
         fake_home = tmp_path / "home"
         (fake_home / ".config" / "claude").mkdir(parents=True)
         (fake_home / ".config" / "claude" / "oauth-token").write_text("home-xdg-token")
         monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
         monkeypatch.setattr("askcc.runners.Path.home", lambda: fake_home)
-        token, source = _resolve_oauth_token()
+        token, source = runner._resolve_oauth_token()
         assert token == "home-xdg-token"  # noqa: S105
         assert ".config/claude/oauth-token" in source
 
     def test_credentials_json_used_with_warning(
         self,
+        runner: ClaudeRunner,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
         caplog: pytest.LogCaptureFixture,
@@ -2246,19 +2254,20 @@ class TestResolveOAuthToken:
         creds.write_text(json.dumps({"claudeAiOauth": {"accessToken": "creds-token"}}))
         monkeypatch.setattr("askcc.runners.CREDENTIALS_JSON_FILE", creds)
         with caplog.at_level("INFO", logger="askcc.runners"):
-            token, source = _resolve_oauth_token()
+            token, source = runner._resolve_oauth_token()
         assert token == "creds-token"  # noqa: S105
         assert str(creds) in source
 
-    def test_trailing_newline_stripped(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    def test_trailing_newline_stripped(self, runner: ClaudeRunner, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
         token_file = tmp_path / "token"
         token_file.write_text("abc\n")
         monkeypatch.setenv(OAUTH_TOKEN_FILE_ENV, str(token_file))
-        token, _ = _resolve_oauth_token()
+        token, _ = runner._resolve_oauth_token()
         assert token == "abc"  # noqa: S105
 
     def test_unreadable_file_warns_and_continues(
         self,
+        runner: ClaudeRunner,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
         caplog: pytest.LogCaptureFixture,
@@ -2280,7 +2289,7 @@ class TestResolveOAuthToken:
 
         monkeypatch.setattr(Path, "read_text", fake_read_text)
         with caplog.at_level("WARNING", logger="askcc.runners"):
-            token, source = _resolve_oauth_token()
+            token, source = runner._resolve_oauth_token()
         assert token == "from-conventional"  # noqa: S105
         assert str(conventional) in source
         assert "cannot read token file" in caplog.text
@@ -2288,6 +2297,7 @@ class TestResolveOAuthToken:
 
     def test_malformed_credentials_json_warns_and_continues(
         self,
+        runner: ClaudeRunner,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
         caplog: pytest.LogCaptureFixture,
@@ -2296,12 +2306,13 @@ class TestResolveOAuthToken:
         creds.write_text("{not json")
         monkeypatch.setattr("askcc.runners.CREDENTIALS_JSON_FILE", creds)
         with caplog.at_level("WARNING", logger="askcc.runners"), pytest.raises(OAuthTokenNotFoundError):
-            _resolve_oauth_token()
+            runner._resolve_oauth_token()
         assert "failed to parse" in caplog.text
         assert str(creds) in caplog.text
 
     def test_credentials_json_missing_keys_warns_and_continues(
         self,
+        runner: ClaudeRunner,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
         caplog: pytest.LogCaptureFixture,
@@ -2310,11 +2321,12 @@ class TestResolveOAuthToken:
         creds.write_text(json.dumps({"otherSchema": {"foo": "bar"}}))
         monkeypatch.setattr("askcc.runners.CREDENTIALS_JSON_FILE", creds)
         with caplog.at_level("WARNING", logger="askcc.runners"), pytest.raises(OAuthTokenNotFoundError):
-            _resolve_oauth_token()
+            runner._resolve_oauth_token()
         assert "claudeAiOauth.accessToken" in caplog.text
 
     def test_empty_token_file_falls_through(
         self,
+        runner: ClaudeRunner,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ):
@@ -2322,14 +2334,16 @@ class TestResolveOAuthToken:
         empty_file.write_text("   \n  \n")
         monkeypatch.setenv(OAUTH_TOKEN_FILE_ENV, str(empty_file))
         with pytest.raises(OAuthTokenNotFoundError):
-            _resolve_oauth_token()
+            runner._resolve_oauth_token()
 
-    def test_all_sources_empty_raises_with_paths(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    def test_all_sources_empty_raises_with_paths(
+        self, runner: ClaudeRunner, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
         monkeypatch.setenv(OAUTH_TOKEN_FILE_ENV, str(tmp_path / "missing-custom"))
         monkeypatch.setattr("askcc.runners.CONVENTIONAL_TOKEN_FILE", tmp_path / "missing-conventional")
         monkeypatch.setattr("askcc.runners.CREDENTIALS_JSON_FILE", tmp_path / "missing-credentials.json")
         with pytest.raises(OAuthTokenNotFoundError) as exc_info:
-            _resolve_oauth_token()
+            runner._resolve_oauth_token()
         message = str(exc_info.value)
         assert OAUTH_TOKEN_ENV in message
         assert OAUTH_TOKEN_FILE_ENV in message
@@ -2337,12 +2351,12 @@ class TestResolveOAuthToken:
         assert "missing-conventional" in message
         assert "missing-credentials.json" in message
 
-    def test_read_credentials_json_helper_returns_none_when_missing(self, tmp_path: Path):
-        result = _read_credentials_json(tmp_path / "does-not-exist")
+    def test_read_credentials_json_helper_returns_none_when_missing(self, runner: ClaudeRunner, tmp_path: Path):
+        result = runner._read_credentials_json(tmp_path / "does-not-exist")
         assert result is None
 
-    def test_read_token_file_helper_returns_none_when_missing(self, tmp_path: Path):
-        result = _read_token_file(tmp_path / "does-not-exist")
+    def test_read_token_file_helper_returns_none_when_missing(self, runner: ClaudeRunner, tmp_path: Path):
+        result = runner._read_token_file(tmp_path / "does-not-exist")
         assert result is None
 
 
@@ -2370,7 +2384,7 @@ class TestClaudeRunnerOAuthIntegration:
         mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="{}", stderr="")
         with (
             patch(
-                "askcc.runners._resolve_oauth_token",
+                "askcc.runners.ClaudeRunner._resolve_oauth_token",
                 return_value=("xyz", f"file /tmp/example-{OAUTH_TOKEN_ENV}"),
             ),
             patch("askcc.runners.subprocess.run", return_value=mock_result) as mock_run,
@@ -2389,7 +2403,7 @@ class TestClaudeRunnerOAuthIntegration:
         with (
             caplog.at_level("INFO", logger="askcc.runners"),
             patch(
-                "askcc.runners._resolve_oauth_token",
+                "askcc.runners.ClaudeRunner._resolve_oauth_token",
                 return_value=("token", "file /home/user/.tokens/.claude-oauth-token"),
             ),
             patch("askcc.runners.subprocess.run", return_value=mock_result),
@@ -2408,7 +2422,7 @@ class TestClaudeRunnerOAuthIntegration:
         with (
             caplog.at_level("INFO", logger="askcc.runners"),
             patch(
-                "askcc.runners._resolve_oauth_token",
+                "askcc.runners.ClaudeRunner._resolve_oauth_token",
                 return_value=("token", f"env {OAUTH_TOKEN_ENV}"),
             ),
             patch("askcc.runners.subprocess.run", return_value=mock_result),
@@ -2427,7 +2441,7 @@ class TestClaudeRunnerOAuthIntegration:
         with (
             caplog.at_level("WARNING", logger="askcc.runners"),
             patch(
-                "askcc.runners._resolve_oauth_token",
+                "askcc.runners.ClaudeRunner._resolve_oauth_token",
                 return_value=("token", f"file {creds_path}"),
             ),
             patch("askcc.runners.subprocess.run", return_value=mock_result),

@@ -100,6 +100,31 @@ Supporting commands can be used at any point:
 | `ASKCC_LANGUAGE` | Default output language for agent comments (`english`, `japanese`) | `english` |
 | `DECISION_ISSUE_LABEL` | GitHub label applied when an agent flags a decision is needed | `needs:decision` |
 | `ENABLE_ISSUE_LABEL_PREFIX_VALIDATION` | Enable/disable issue label prefix validation before agent execution | `true` |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Claude Code OAuth token used by the spawned `claude` subprocess | (none) |
+| `CLAUDE_OAUTH_TOKEN_FILE` | Path to a file containing the OAuth token. Read when `CLAUDE_CODE_OAUTH_TOKEN` is unset/empty | (none) |
+
+### Authentication
+
+Before invoking the `claude` subprocess, askcc resolves the OAuth token via the
+following discovery chain. The first source that produces a non-empty token wins;
+the chosen source is logged at `INFO` level so failures are diagnosable from the
+run log alone.
+
+1. `CLAUDE_CODE_OAUTH_TOKEN` environment variable (no log when used).
+2. `CLAUDE_OAUTH_TOKEN_FILE` environment variable — read the file at that path.
+3. `~/.tokens/.claude-oauth-token` — conventional headless token file used by
+   `~/.bashrc` to populate the env var for interactive shells.
+4. `${XDG_CONFIG_HOME:-~/.config}/claude/oauth-token` — XDG-compliant fallback.
+5. `~/.claude/.credentials.json` — last-resort parse of `claudeAiOauth.accessToken`.
+   A `WARNING` is logged when this source is used because Claude Code refreshes
+   its access token in RAM and may not write back, so the file can be stale.
+
+If none of the sources produce a non-empty token, askcc exits non-zero with an
+error listing every location that was checked, **without** invoking `claude`.
+
+Whitespace around file contents is stripped. Unreadable token files
+(`PermissionError`) and malformed `.credentials.json` files emit a `WARNING` and
+the chain continues to the next source.
 
 ### User Configuration File
 

@@ -321,6 +321,10 @@ Example:
       C -- any fail --> E[stay in develop]
   `` `
   ```
+- Mermaid label safety: quote labels containing `/`, `\\`, `(`, `)`, `|`, `:`, or starting \
+with punctuation — e.g. `B["/simplify, commit, push"]`, not `B[/simplify, commit, push]`. \
+Unquoted leading `/` or `\\` is parsed as parallelogram/trapezoid shape syntax and breaks \
+rendering with a "Lexical error / Unrecognized text" message.
 - Keep diagrams concise — one or two covering the most important flows. \
 Skip this section for trivial changes (config-only, docs-only, single-line fix).
 

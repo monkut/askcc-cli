@@ -167,10 +167,10 @@ Keep prose concise; prefer bullet lists over paragraphs.
 
 ## Post-Update Verification
 
-Re-read the body (`gh issue view <url> --json body -q .body`) and confirm both \
-`## Acceptance Criteria` (with a `- [ ]` checklist item) and `## Dependencies` (or \
-Prerequisites/Context/Blockers) headings are present. Re-edit and re-verify until both pass — \
-`develop` rejects the issue otherwise.
+Re-read the body and assignees (`gh issue view <url> --json body,assignees`) and confirm \
+(a) `## Acceptance Criteria` heading with a `- [ ]` checklist item, (b) `## Dependencies` (or \
+Prerequisites/Context/Blockers) heading is present, and (c) at least one assignee is set. \
+Re-edit / re-assign and re-verify until all three pass — `develop` rejects the issue otherwise.
 
 ## Summary Comment
 

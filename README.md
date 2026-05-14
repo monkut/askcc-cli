@@ -27,6 +27,30 @@ Or run directly with `uvx`:
 uvx --from . --python 3.14 askcc --help
 ```
 
+## Skills
+
+### `handle-github-issue` (standalone install)
+
+The `handle-github-issue` skill drives an issue through prepare / plan / develop / issue-review / pr-review / explore / diagnose / fix-ci entirely from Claude Code, with no runtime dependency on the askcc Python package. Install it directly into Claude Code:
+
+```bash
+mkdir -p ~/.claude/skills/handle-github-issue
+curl -fsSL https://raw.githubusercontent.com/monkut/askcc-cli/main/askcc/skills/handle-github-issue/SKILL.md \
+  -o ~/.claude/skills/handle-github-issue/SKILL.md
+```
+
+Pin to a release tag instead of `main` for reproducibility:
+
+```bash
+TAG=$(gh release view --repo monkut/askcc-cli --json tagName -q .tagName)
+curl -fsSL "https://raw.githubusercontent.com/monkut/askcc-cli/${TAG}/askcc/skills/handle-github-issue/SKILL.md" \
+  -o ~/.claude/skills/handle-github-issue/SKILL.md
+```
+
+Requires only [Claude Code](https://claude.ai) and an authenticated [GitHub CLI](https://cli.github.com/) (`gh`). Once installed, invoke it from any Claude Code session — e.g. "plan https://github.com/owner/repo/issues/1".
+
+To install **all** bundled skills (including `request-askcc`) via the askcc CLI, see [`askcc install`](#examples).
+
 ## Usage
 
 ```
@@ -288,7 +312,7 @@ Develop an issue in a specific project directory:
 askcc --cwd /path/to/project develop --github-issue-url https://github.com/monkut/askcc-cli/issues/1
 ```
 
-Install bundled skills:
+Install bundled skills (for a Claude-Code-only install of just the `handle-github-issue` skill without `askcc`, see [Skills](#skills)):
 
 ```bash
 askcc install

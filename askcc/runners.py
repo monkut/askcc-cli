@@ -42,15 +42,21 @@ class Runner(ABC):
         max_thinking_tokens: int | None = None,
         disable_thinking: bool = False,
         disable_adaptive_thinking: bool = False,
+        model: str | None = None,
     ) -> tuple[int, dict | None]:
         """Execute a prompt and return (exit_code, usage_dict_or_none)."""
 
 
-def _frontmatter_cli_flags(config: AgentConfig) -> list[str]:
-    """Translate AgentConfig frontmatter fields into claude CLI flags."""
+def _frontmatter_cli_flags(config: AgentConfig, model: str | None = None) -> list[str]:
+    """Translate AgentConfig frontmatter fields into claude CLI flags.
+
+    `model` overrides `config.model` when supplied (used by the CLI > env > frontmatter
+    precedence chain resolved in `askcc.cli`).
+    """
     flags: list[str] = []
-    if config.model:
-        flags.extend(["--model", config.model])
+    effective_model = model if model is not None else config.model
+    if effective_model:
+        flags.extend(["--model", effective_model])
     if config.tools:
         flags.extend(["--allowedTools", ",".join(config.tools)])
     if config.disallowed_tools:
@@ -167,6 +173,7 @@ class ClaudeRunner(Runner):
         max_thinking_tokens: int | None = None,
         disable_thinking: bool = False,
         disable_adaptive_thinking: bool = False,
+        model: str | None = None,
     ) -> tuple[int, dict | None]:
         agent_definition = {config.action_name: {"description": config.description, "prompt": config.system_prompt}}
 
@@ -183,7 +190,7 @@ class ClaudeRunner(Runner):
         ]
         if effort_level:
             cmd.extend(["--effort", effort_level])
-        cmd.extend(_frontmatter_cli_flags(config))
+        cmd.extend(_frontmatter_cli_flags(config, model=model))
 
         # Remove CLAUDECODE env var so the child claude process doesn't think it's nested inside Claude Code
         env = os.environ.copy()

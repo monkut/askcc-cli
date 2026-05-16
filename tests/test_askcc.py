@@ -28,6 +28,7 @@ from askcc.functions import (
     _has_acceptance_criteria,
     _has_dependencies_section,
     _parse_issue_url,
+    _resolve_transferred_predecessors,
     _run_project_verification,
     _swap_issue_labels,
     _transition_project_fields,
@@ -1693,6 +1694,121 @@ class TestFindLinkedPrNumber:
         with patch("askcc.functions.subprocess.run", return_value=result):
             assert _find_linked_pr_number("/usr/bin/gh", "owner", "repo", 42) == 3
 
+    def test_substring_collision_returns_none(self):
+        """Regression: body 'Closes weyucou/task-management#52' must not pair with issue_number=5."""
+        prs = json.dumps(
+            [{"number": 6, "headRefName": "chore/52-gitignore", "body": "Closes weyucou/task-management#52"}]
+        )
+        result = subprocess.CompletedProcess(args=[], returncode=0, stdout=prs, stderr="")
+        with patch("askcc.functions.subprocess.run", return_value=result):
+            assert _find_linked_pr_number("/usr/bin/gh", "weyucou", "issue-tracker", 5) is None
+
+    def test_word_boundary_rejects_substring_in_bare_reference(self):
+        """Bare '#51' / '#500' must not be paired with issue_number=5."""
+        prs = json.dumps([{"number": 9, "headRefName": "main", "body": "See #51, #500"}])
+        result = subprocess.CompletedProcess(args=[], returncode=0, stdout=prs, stderr="")
+        with patch("askcc.functions.subprocess.run", return_value=result):
+            assert _find_linked_pr_number("/usr/bin/gh", "owner", "repo", 5) is None
+
+    def test_word_boundary_positive_bare_reference(self):
+        """Bare '#5' (with close keyword) pairs cleanly with issue_number=5."""
+        prs = json.dumps([{"number": 4, "headRefName": "main", "body": "Fixes #5"}])
+        result = subprocess.CompletedProcess(args=[], returncode=0, stdout=prs, stderr="")
+        with patch("askcc.functions.subprocess.run", return_value=result):
+            assert _find_linked_pr_number("/usr/bin/gh", "owner", "repo", 5) == 4
+
+    def test_transfer_aware_branch_match(self):
+        """Branch matching the predecessor number wins after issue transfer."""
+        pr_list = json.dumps([{"number": 2, "headRefName": "chore/25-yaml-event-schema-v1", "body": "unrelated"}])
+        timeline = json.dumps(
+            [
+                {
+                    "event": "transferred",
+                    "source": {
+                        "issue": {
+                            "number": 25,
+                            "repository": {"name": "task-management", "owner": {"login": "weyucou"}},
+                        }
+                    },
+                }
+            ]
+        )
+        pr_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=pr_list, stderr="")
+        timeline_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=timeline, stderr="")
+        with patch("askcc.functions.subprocess.run", side_effect=[pr_result, timeline_result]):
+            assert _find_linked_pr_number("/usr/bin/gh", "weyucou", "issue-tracker", 5) == 2
+
+    def test_transfer_aware_body_match(self):
+        """Body 'Closes weyucou/task-management#25' pairs with transferred issue#5."""
+        pr_list = json.dumps(
+            [{"number": 2, "headRefName": "no-conventional-branch", "body": "Closes weyucou/task-management#25"}]
+        )
+        timeline = json.dumps(
+            [
+                {
+                    "event": "transferred",
+                    "source": {
+                        "issue": {
+                            "number": 25,
+                            "repository": {"name": "task-management", "owner": {"login": "weyucou"}},
+                        }
+                    },
+                }
+            ]
+        )
+        pr_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=pr_list, stderr="")
+        timeline_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=timeline, stderr="")
+        with patch("askcc.functions.subprocess.run", side_effect=[pr_result, timeline_result]):
+            assert _find_linked_pr_number("/usr/bin/gh", "weyucou", "issue-tracker", 5) == 2
+
+
+class TestResolveTransferredPredecessors:
+    def test_parses_transferred_event(self):
+        timeline = json.dumps(
+            [
+                {"event": "labeled"},
+                {
+                    "event": "transferred",
+                    "source": {
+                        "issue": {
+                            "number": 25,
+                            "repository": {"name": "task-management", "owner": {"login": "weyucou"}},
+                        }
+                    },
+                },
+            ]
+        )
+        result = subprocess.CompletedProcess(args=[], returncode=0, stdout=timeline, stderr="")
+        with patch("askcc.functions.subprocess.run", return_value=result):
+            predecessors = _resolve_transferred_predecessors("/usr/bin/gh", "weyucou", "issue-tracker", 5)
+        assert predecessors == [("weyucou", "task-management", 25)]
+
+    def test_clean_timeline_returns_empty(self):
+        timeline = json.dumps([{"event": "labeled"}, {"event": "commented"}])
+        result = subprocess.CompletedProcess(args=[], returncode=0, stdout=timeline, stderr="")
+        with patch("askcc.functions.subprocess.run", return_value=result):
+            assert _resolve_transferred_predecessors("/usr/bin/gh", "weyucou", "issue-tracker", 5) == []
+
+    def test_subprocess_error_returns_empty(self, caplog: pytest.LogCaptureFixture):
+        with (
+            caplog.at_level("WARNING", logger="askcc.functions"),
+            patch(
+                "askcc.functions.subprocess.run",
+                side_effect=subprocess.CalledProcessError(1, "gh", stderr="api error"),
+            ),
+        ):
+            assert _resolve_transferred_predecessors("/usr/bin/gh", "weyucou", "issue-tracker", 5) == []
+        assert "Failed to fetch timeline" in caplog.text
+
+    def test_bad_json_returns_empty(self, caplog: pytest.LogCaptureFixture):
+        result = subprocess.CompletedProcess(args=[], returncode=0, stdout="not-json", stderr="")
+        with (
+            caplog.at_level("WARNING", logger="askcc.functions"),
+            patch("askcc.functions.subprocess.run", return_value=result),
+        ):
+            assert _resolve_transferred_predecessors("/usr/bin/gh", "weyucou", "issue-tracker", 5) == []
+        assert "Failed to fetch timeline" in caplog.text
+
 
 class TestFetchPrContent:
     ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/42"
@@ -1711,6 +1827,9 @@ class TestFetchPrContent:
         prs = json.dumps([{"number": pr_number, "headRefName": "feature/42-add", "body": pr_body}])
         list_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=prs, stderr="")
 
+        # Timeline lookup (for _resolve_transferred_predecessors) — empty events
+        timeline_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr="")
+
         # PR metadata
         pr_data = json.dumps({"title": pr_title, "body": pr_body, "html_url": pr_url})
         meta_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=pr_data, stderr="")
@@ -1722,7 +1841,7 @@ class TestFetchPrContent:
         comments = json.dumps(review_comments or [])
         comments_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=comments, stderr="")
 
-        return [list_result, meta_result, diff_result, comments_result]
+        return [list_result, timeline_result, meta_result, diff_result, comments_result]
 
     def test_fetches_pr_content(self):
         responses = self._make_pr_responses()

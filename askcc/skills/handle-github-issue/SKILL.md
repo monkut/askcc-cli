@@ -352,13 +352,27 @@ Update test plan in PR description:
 
 Before adopting the persona, fetch the linked PR:
 
-1. List PRs and find the one whose `headRefName` matches `^[a-z]+/<issue-number>-`, else any PR whose body references `#<N>` or `/issues/<N>`:
+1. Compute predecessor coordinates for transferred issues. Query the Timeline API for `transferred` events and collect each `source.issue.repository.owner.login`, `source.issue.repository.name`, and `source.issue.number`:
+
+   ```bash
+   gh api --paginate repos/<owner>/<repo>/issues/<N>/timeline
+   ```
+
+   If the call fails, treat the predecessor list as empty and continue. Let `target_numbers = {<N>, prior_number_1, prior_number_2, …}` and `target_refs = {<owner>/<repo>#<N>, <prior_owner>/<prior_repo>#<prior_number>, …}`.
+
+2. List open PRs and find one with a positive match (in this priority order). Word-boundary matching is required — a bare `#5` must not match `#52`.
 
    ```bash
    gh pr list -R <owner>/<repo> --json number,headRefName,body --limit 50
    ```
 
-2. Fetch metadata, diff, and review comments:
+   - **Branch convention**: `headRefName` matches `^[^/]+/<num>-` for any `num` in `target_numbers`.
+   - **Close keyword**: PR body contains `Closes`, `Closed`, `Close`, `Fixes`, `Fixed`, `Fix`, `Resolves`, `Resolved`, or `Resolve` (case-insensitive) followed by either bare `#<num>` (current repo) or qualified `<qowner>/<qrepo>#<num>`, where the `(owner, repo, num)` triple is in `target_refs`. Digit boundary on `num` is mandatory.
+   - **Issue URL fallback**: PR body contains `/issues/<num>` (no trailing digit) for any `num` in `target_numbers`.
+
+   If no PR satisfies one of these positive matches, **abort the action without posting** — do not run `pr-review` against a PR that does not explicitly reference this issue or one of its predecessors. This prevents the substring-match mispair (e.g. `#5` accidentally matching a PR whose body references `#52`).
+
+3. Fetch metadata, diff, and review comments:
 
    ```bash
    gh api repos/<owner>/<repo>/pulls/<pr-number>

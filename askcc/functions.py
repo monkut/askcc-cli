@@ -94,11 +94,94 @@ def fetch_github_issue(github_issue_url: str) -> str:
     return "\n\n".join(sections)
 
 
-def _find_linked_pr_number(gh: str, owner: str, repo: str, issue_number: int) -> int | None:
-    """Find the most recent open PR linked to the given issue number.
+CLOSE_KEYWORD_RE = re.compile(
+    r"\b(?:closes|closed|close|fixes|fixed|fix|resolves|resolved|resolve)\s+"
+    r"(?:(?P<qualified>[\w.-]+/[\w.-]+))?#(?P<num>\d+)(?!\d)",
+    re.IGNORECASE,
+)
 
-    Searches by branch naming convention (e.g. feature/N-*, add/N-*) first,
-    then falls back to matching issue references in PR body text.
+
+def _resolve_transferred_predecessors(gh: str, owner: str, repo: str, issue_number: int) -> list[tuple[str, str, int]]:
+    """Return prior ``(owner, repo, number)`` coordinates of a transferred issue.
+
+    Queries the GitHub Timeline API for ``transferred`` events and extracts
+    each predecessor from ``source.issue``. GitHub currently exposes only the
+    immediately prior hop; the list shape is kept for forward compatibility.
+
+    All subprocess/JSON errors are logged and yield an empty list — never raised.
+    """
+    repo_nwo = f"{owner}/{repo}"
+    try:
+        result = subprocess.run(  # noqa: S603
+            [gh, "api", "--paginate", f"repos/{repo_nwo}/issues/{issue_number}/timeline"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        events = json.loads(result.stdout)
+    except (subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        logger.warning("Failed to fetch timeline for %s#%d: %s", repo_nwo, issue_number, exc)
+        return []
+
+    predecessors: list[tuple[str, str, int]] = []
+    for event in events:
+        if not isinstance(event, dict) or event.get("event") != "transferred":
+            continue
+        source_issue = (event.get("source") or {}).get("issue") or {}
+        prior_repo = source_issue.get("repository") or {}
+        prior_owner = (prior_repo.get("owner") or {}).get("login")
+        prior_repo_name = prior_repo.get("name")
+        prior_number = source_issue.get("number")
+        if prior_owner and prior_repo_name and prior_number is not None:
+            predecessors.append((prior_owner, prior_repo_name, int(prior_number)))
+    return predecessors
+
+
+def _body_references_target(
+    body: str,
+    targets: set[tuple[str, str, int]],
+    current_owner: str,
+    current_repo: str,
+) -> bool:
+    """Return True if ``body`` positively references one of ``targets``.
+
+    Accepts close-keyword references (``Closes #N`` / ``Fixes owner/repo#N`` /
+    ``Resolves …``) and word-bounded ``/issues/N`` URL references. Repo
+    qualifiers are compared case-insensitively.
+    """
+    targets_lower = {(o.lower(), r.lower(), n) for o, r, n in targets}
+    target_numbers = {n for *_, n in targets}
+    current_key = (current_owner.lower(), current_repo.lower())
+
+    for match in CLOSE_KEYWORD_RE.finditer(body):
+        num = int(match.group("num"))
+        qualified = match.group("qualified")
+        if qualified is None:
+            if (*current_key, num) in targets_lower:
+                return True
+        else:
+            qowner, _, qrepo = qualified.partition("/")
+            if (qowner.lower(), qrepo.lower(), num) in targets_lower:
+                return True
+
+    return any(re.search(rf"/issues/{num}(?!\d)", body) for num in target_numbers)
+
+
+def _find_linked_pr_number(gh: str, owner: str, repo: str, issue_number: int) -> int | None:
+    """Find the most recent open PR positively linked to ``issue_number``.
+
+    Matching rules (in priority order):
+      1. PR branch name matches ``^[^/]+/{N}-`` for any ``N`` in
+         ``{issue_number} ∪ predecessor_numbers``.
+      2. PR body contains a close keyword (Closes/Fixes/Resolves and
+         inflections) referencing the issue or a predecessor — bare ``#N``
+         (current repo) or qualified ``owner/repo#N``.
+      3. PR body contains ``/issues/N`` with a digit boundary for any target.
+
+    Predecessor coordinates come from ``_resolve_transferred_predecessors`` so
+    PRs created against a pre-transfer issue can still be paired after the
+    transfer. Returns ``None`` if no PR positively references the issue or any
+    predecessor — callers (``fetch_pr_content``) treat this as "no link".
     """
     repo_nwo = f"{owner}/{repo}"
     try:
@@ -113,16 +196,19 @@ def _find_linked_pr_number(gh: str, owner: str, repo: str, issue_number: int) ->
         logger.warning("Failed to list PRs for %s: %s", repo_nwo, exc)
         return None
 
-    # Match branch names like "type/N-description" (askcc convention)
-    branch_pattern = re.compile(rf"^[^/]+/{issue_number}-")
+    predecessors = _resolve_transferred_predecessors(gh, owner, repo, issue_number)
+    targets: set[tuple[str, str, int]] = {(owner, repo, issue_number), *predecessors}
+    target_numbers = {n for *_, n in targets}
+
+    branch_patterns = [re.compile(rf"^[^/]+/{n}-") for n in target_numbers]
     for pr in prs:
-        if branch_pattern.match(pr.get("headRefName", "")):
+        head = pr.get("headRefName", "") or ""
+        if any(p.match(head) for p in branch_patterns):
             return pr["number"]
 
-    # Fallback: check PR body for issue reference
     for pr in prs:
         body = pr.get("body", "") or ""
-        if f"#{issue_number}" in body or f"/issues/{issue_number}" in body:
+        if _body_references_target(body, targets, owner, repo):
             return pr["number"]
 
     return None

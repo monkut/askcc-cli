@@ -116,6 +116,7 @@ Global options (before the command):
 | `-l`, `--language` | Output language for agent comments (`english`, `japanese`) |
 | `-r`, `--runner` | Runner to execute the task (default: `claude`) |
 | `--effort` | Claude thinking effort (`low`, `medium`, `high`, `xhigh`, `max`) |
+| `--model` | Claude model (`opus`, `sonnet`, `haiku`, `inherit`) |
 | `--max-thinking-tokens N` | Thinking token budget |
 | `--disable-thinking` | Force-disable extended thinking |
 | `--[no-]disable-adaptive-thinking` | Toggle adaptive reasoning (Opus 4.6, Sonnet 4.6) |
@@ -138,6 +139,7 @@ Command-specific options:
 | `ASKCC_HOME` | Root directory for askcc configuration, templates, and logs | `~/.askcc` |
 | `ASKCC_LANGUAGE` | Default output language for agent comments (`english`, `japanese`) | `english` |
 | `ASKCC_CLAUDE_EFFORT_LEVEL` | Default thinking effort (`low`, `medium`, `high`, `xhigh`, `max`) | `xhigh` |
+| `ASKCC_CLAUDE_MODEL` | Claude model (`opus`, `sonnet`, `haiku`, `inherit`) | (frontmatter) |
 | `ASKCC_CLAUDE_MAX_THINKING_TOKENS` | Thinking token budget | `21000` |
 | `ASKCC_CLAUDE_DISABLE_THINKING` | Force-disable extended thinking (`1`/`true`) | `false` |
 | `ASKCC_CLAUDE_DISABLE_ADAPTIVE_THINKING` | Disable adaptive reasoning (Opus 4.6, Sonnet 4.6) | `true` |
@@ -235,12 +237,12 @@ Note: askcc runs `claude` with `--dangerously-skip-permissions` so it can execut
 
 ##### Override Precedence
 
-For `effort` and `max_thinking_tokens`, askcc resolves the effective value in this order (highest wins):
+For `effort`, `max_thinking_tokens`, and `model`, askcc resolves the effective value in this order (highest wins):
 
-1. Explicit CLI flag (`--effort`, `--max-thinking-tokens`)
-2. Environment variable (`ASKCC_CLAUDE_EFFORT_LEVEL`, `ASKCC_CLAUDE_MAX_THINKING_TOKENS`)
+1. Explicit CLI flag (`--effort`, `--max-thinking-tokens`, `--model`)
+2. Environment variable (`ASKCC_CLAUDE_EFFORT_LEVEL`, `ASKCC_CLAUDE_MAX_THINKING_TOKENS`, `ASKCC_CLAUDE_MODEL`)
 3. Template frontmatter (per-action default in `~/.askcc/templates/`)
-4. Built-in default (`xhigh`, `21000`)
+4. Built-in default (`xhigh`, `21000`; `model` has no built-in default — when unset everywhere, no `--model` flag is emitted and `claude` picks its own)
 
 ### Post-Develop Verification
 

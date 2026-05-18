@@ -8,7 +8,7 @@ from pathlib import Path
 from string import Template
 
 from . import __version__, settings
-from .definitions import AgentAction, AgentConfig
+from .definitions import VALID_FRONTMATTER_MODELS, AgentAction, AgentConfig
 from .functions import (
     CheckResult,
     _parse_issue_url,
@@ -83,6 +83,26 @@ def _resolve_max_thinking_tokens(cli_value: int | None, frontmatter_value: int |
     return settings.DEFAULT_MAX_THINKING_TOKENS
 
 
+def _resolve_model(cli_value: str | None, frontmatter_value: str | None) -> str | None:
+    """Precedence: CLI flag > env var > template frontmatter. No built-in default.
+
+    Returns None when no source is set so the caller can suppress the `--model` flag
+    and let claude pick its own default.
+    """
+    if cli_value is not None:
+        return cli_value
+    env_value = os.environ.get("ASKCC_CLAUDE_MODEL", "")
+    if env_value:
+        if env_value in VALID_FRONTMATTER_MODELS:
+            return env_value
+        logger.warning(
+            "Invalid ASKCC_CLAUDE_MODEL=%r (valid: %s) — falling through to frontmatter/default",
+            env_value,
+            ", ".join(VALID_FRONTMATTER_MODELS),
+        )
+    return frontmatter_value
+
+
 def _print_validation_report(issue_url: str, checks: list[CheckResult]) -> None:
     """Print a structured pass/fail validation report."""
     passed_count = sum(1 for c in checks if c.passed)
@@ -143,6 +163,14 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
         help=f"Claude thinking effort level. "
         f"Precedence: CLI > env (ASKCC_CLAUDE_EFFORT_LEVEL) > template frontmatter > "
         f"built-in default ({settings.DEFAULT_EFFORT_LEVEL}).",
+    )
+    parser.add_argument(
+        "--model",
+        choices=VALID_FRONTMATTER_MODELS,
+        default=None,
+        help="Claude model. "
+        "Precedence: CLI > env (ASKCC_CLAUDE_MODEL) > template frontmatter > "
+        "claude's built-in default.",
     )
     parser.add_argument(
         "--max-thinking-tokens",
@@ -285,6 +313,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
     runner = get_runner(args.runner)
     effort_level = _resolve_effort(args.effort, config.effort)
     max_thinking_tokens = _resolve_max_thinking_tokens(args.max_thinking_tokens, config.max_thinking_tokens)
+    model = _resolve_model(args.model, config.model)
     try:
         try:
             return_code, usage = runner.run(
@@ -296,6 +325,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
                 max_thinking_tokens=max_thinking_tokens,
                 disable_thinking=args.disable_thinking,
                 disable_adaptive_thinking=args.disable_adaptive_thinking,
+                model=model,
             )
         except OAuthTokenNotFoundError as e:
             logger.error("[%s] %s", issue_url, e)  # noqa: TRY400

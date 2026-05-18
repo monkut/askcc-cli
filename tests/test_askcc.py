@@ -9,12 +9,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from askcc.cli import main
+from askcc.cli import _resolve_model, main
 from askcc.definitions import (
     AGENT_CONFIGS,
     DEVELOP_AGENT_PROMPT,
     FIXCI_AGENT_PROMPT,
     REVIEWPR_AGENT_PROMPT,
+    VALID_FRONTMATTER_MODELS,
     AgentAction,
     AgentConfig,
 )
@@ -2819,3 +2820,153 @@ class TestRunnerFrontmatterFlags:
         cmd = self._run(self._config())
         for flag in ("--model", "--allowedTools", "--disallowedTools", "--max-turns"):
             assert flag not in cmd
+
+    def test_model_override_emitted(self):
+        runner = ClaudeRunner()
+        mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="{}", stderr="")
+        config = self._config(model="opus")
+        with patch("askcc.runners.subprocess.run", return_value=mock_result) as mock_run:
+            runner.run("prompt", config=config, issue_url=self.ISSUE_URL, cwd=Path.cwd(), model="sonnet")
+        cmd = mock_run.call_args[0][0]
+        assert "--model" in cmd
+        assert cmd[cmd.index("--model") + 1] == "sonnet"
+
+    def test_model_falls_back_to_config_when_unset(self):
+        runner = ClaudeRunner()
+        mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="{}", stderr="")
+        config = self._config(model="opus")
+        with patch("askcc.runners.subprocess.run", return_value=mock_result) as mock_run:
+            runner.run("prompt", config=config, issue_url=self.ISSUE_URL, cwd=Path.cwd())
+        cmd = mock_run.call_args[0][0]
+        assert "--model" in cmd
+        assert cmd[cmd.index("--model") + 1] == "opus"
+
+
+class TestModelPrecedence:
+    """Tests for CLI > env > frontmatter > unset precedence on the `model` field."""
+
+    ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/1"
+
+    def _run_main(self, args: list[str], frontmatter_model: str | None = "opus") -> MagicMock:
+        mock_runner = _mock_runner()
+        base = AGENT_CONFIGS[AgentAction.PLAN]
+        fake_config = AgentConfig(
+            action_name=base.action_name,
+            description=base.description,
+            system_prompt="body",
+            user_prompt_template=base.user_prompt_template,
+            system_prompt_file=base.system_prompt_file,
+            user_prompt_file=base.user_prompt_file,
+            required_variables=base.required_variables,
+            model=frontmatter_model,
+        )
+        with (
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.validate_issue_labels", return_value=[]),
+            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
+            patch("askcc.cli.load_agent_config", return_value=fake_config),
+            patch("askcc.cli.transition_issue_to_development"),
+            patch("askcc.cli.get_runner", return_value=mock_runner),
+            patch("sys.argv", ["askcc", *args, "plan", "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit),
+        ):
+            main()
+        return mock_runner
+
+    def test_cli_overrides_frontmatter_and_env(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("ASKCC_CLAUDE_MODEL", "haiku")
+        runner = self._run_main(["--model", "sonnet"], frontmatter_model="opus")
+        assert runner.run.call_args.kwargs["model"] == "sonnet"
+
+    def test_env_overrides_frontmatter(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("ASKCC_CLAUDE_MODEL", "sonnet")
+        runner = self._run_main([], frontmatter_model="opus")
+        assert runner.run.call_args.kwargs["model"] == "sonnet"
+
+    def test_frontmatter_used_when_no_cli_or_env(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("ASKCC_CLAUDE_MODEL", raising=False)
+        runner = self._run_main([], frontmatter_model="opus")
+        assert runner.run.call_args.kwargs["model"] == "opus"
+
+    def test_none_when_no_cli_env_or_frontmatter(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("ASKCC_CLAUDE_MODEL", raising=False)
+        runner = self._run_main([], frontmatter_model=None)
+        assert runner.run.call_args.kwargs["model"] is None
+
+
+class TestModelCLIFlags:
+    """Tests for the --model CLI flag and ASKCC_CLAUDE_MODEL env var forwarding."""
+
+    ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/1"
+
+    def _run_main_with_args(self, extra_args: list[str]) -> MagicMock:
+        mock_runner = _mock_runner()
+        with (
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.validate_issue_labels", return_value=[]),
+            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
+            patch("askcc.cli.get_runner", return_value=mock_runner),
+            patch("sys.argv", ["askcc", *extra_args, "plan", "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit),
+        ):
+            main()
+        return mock_runner
+
+    def test_model_flag_passed_to_runner(self):
+        mock_runner = self._run_main_with_args(["--model", "sonnet"])
+        assert mock_runner.run.call_args.kwargs["model"] == "sonnet"
+
+    def test_model_env_passed_to_runner(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("ASKCC_CLAUDE_MODEL", "sonnet")
+        mock_runner = self._run_main_with_args([])
+        assert mock_runner.run.call_args.kwargs["model"] == "sonnet"
+
+    def test_model_flag_invalid_rejected_by_argparse(self):
+        with (
+            pytest.raises(SystemExit, match="2"),
+            patch("sys.argv", ["askcc", "--model", "opuz", "plan", "-g", self.ISSUE_URL]),
+        ):
+            main()
+
+
+class TestResolveModel:
+    """Tests for the _resolve_model helper (CLI > env > frontmatter > None)."""
+
+    def test_cli_value_wins(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("ASKCC_CLAUDE_MODEL", "haiku")
+        assert _resolve_model("sonnet", "opus") == "sonnet"
+
+    def test_env_value_used_when_no_cli(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("ASKCC_CLAUDE_MODEL", "sonnet")
+        assert _resolve_model(None, "opus") == "sonnet"
+
+    def test_frontmatter_value_used_when_no_cli_or_env(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("ASKCC_CLAUDE_MODEL", raising=False)
+        assert _resolve_model(None, "opus") == "opus"
+
+    def test_returns_none_when_all_unset(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("ASKCC_CLAUDE_MODEL", raising=False)
+        assert _resolve_model(None, None) is None
+
+    def test_invalid_askcc_claude_model_logged_and_ignored(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ):
+        monkeypatch.setenv("ASKCC_CLAUDE_MODEL", "opuz")
+        with caplog.at_level("WARNING", logger="askcc.cli"):
+            result = _resolve_model(None, "opus")
+        assert result == "opus"
+        assert "Invalid ASKCC_CLAUDE_MODEL" in caplog.text
+
+    def test_invalid_env_with_no_frontmatter_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ):
+        monkeypatch.setenv("ASKCC_CLAUDE_MODEL", "opuz")
+        with caplog.at_level("WARNING", logger="askcc.cli"):
+            result = _resolve_model(None, None)
+        assert result is None
+        assert "Invalid ASKCC_CLAUDE_MODEL" in caplog.text
+
+    def test_valid_models_match_frontmatter_choice_set(self):
+        # _resolve_model accepts the same choice set used for frontmatter validation
+        for valid in VALID_FRONTMATTER_MODELS:
+            assert _resolve_model(valid, None) == valid

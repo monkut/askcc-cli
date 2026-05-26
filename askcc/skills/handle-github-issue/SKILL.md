@@ -229,10 +229,10 @@ PR description:
 - Include `## Key Flows` with mermaid diagrams for the main flows changed by this PR. Focus on control flow,
   data flow, or state transitions. Skip this section for trivial changes (config-only, docs-only, single-line fix).
 - Mermaid label safety: quote labels containing `/`, `\`, `(`, `)`, `|`, `:`, or starting with punctuation —
-  e.g. `B["/simplify, commit, push"]`, not `B[/simplify, commit, push]`.
+  e.g. `B["/code-review, commit, push"]`, not `B[/code-review, commit, push]`.
 
 On completion:
-- Run /simplify or /refactor to improve the code.
+- Run /code-review or /refactor to improve the code.
 - Commit and push the feature branch.
 - If no PR exists, open one linked to the issue.
 - If a PR exists (follow-up changes), review and update its description (see "PR description update" below).

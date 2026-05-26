@@ -445,14 +445,14 @@ class TestDevelopPromptMermaidLabelSafety:
     r"""The develop prompt must instruct quoting mermaid labels with shape-reserved chars.
 
     Without quoting, labels starting with `/` or `\` are parsed as parallelogram/trapezoid
-    shape syntax (e.g. `B[/simplify]`) and break rendering with a lexical error.
+    shape syntax (e.g. `B[/code-review]`) and break rendering with a lexical error.
     """
 
     def test_includes_label_safety_guidance(self):
         assert "Mermaid label safety" in DEVELOP_AGENT_PROMPT
 
     def test_includes_quoted_example(self):
-        assert 'B["/simplify, commit, push"]' in DEVELOP_AGENT_PROMPT
+        assert 'B["/code-review, commit, push"]' in DEVELOP_AGENT_PROMPT
 
     def test_warns_against_parallelogram_collision(self):
         assert "parallelogram/trapezoid shape syntax" in DEVELOP_AGENT_PROMPT

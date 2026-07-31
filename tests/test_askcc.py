@@ -954,6 +954,24 @@ class TestValidateIssueReadiness:
         assert not any(c.passed for c in checks)
         assert len(checks) == 4
 
+    def test_dependencies_check_is_advisory(self):
+        issue_json = self._make_issue_json(
+            body="## Acceptance Criteria\n- [ ] Item\n",
+            assignees=[{"login": "dev1"}],
+        )
+        gh_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=issue_json, stderr="")
+
+        with (
+            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
+            patch("askcc.functions.subprocess.run", return_value=gh_result),
+        ):
+            checks = validate_issue_readiness(self.ISSUE_URL)
+
+        deps_check = next(c for c in checks if c.name == "Dependencies identified")
+        assert deps_check.passed is False
+        assert deps_check.advisory is True
+        assert [c.advisory for c in checks if c.name != "Dependencies identified"] == [False, False, False]
+
     def test_blocking_label_detected(self):
         issue_json = self._make_issue_json(
             body="## Acceptance Criteria\n- [ ] Item\n\n## Context\nSee docs.\n",
@@ -1012,6 +1030,28 @@ class TestValidateCommand:
         captured = capfd.readouterr()
         assert "Result: PASS" in captured.out
 
+    def test_validate_exits_zero_when_only_dependencies_missing(self, capfd: pytest.CaptureFixture[str]):
+        issue_json = json.dumps(
+            {
+                "body": "## Acceptance Criteria\n- [ ] Item\n",
+                "assignees": [{"login": "dev1"}],
+                "labels": [],
+            }
+        )
+        gh_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=issue_json, stderr="")
+
+        with (
+            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
+            patch("askcc.functions.subprocess.run", return_value=gh_result),
+            patch("sys.argv", ["askcc", "validate", "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit, match="0"),
+        ):
+            main()
+
+        captured = capfd.readouterr()
+        assert "[WARN] Dependencies identified" in captured.out
+        assert "Result: PASS (3/3 blocking checks passed)" in captured.out
+
     def test_validate_exits_one_on_fail(self, capfd: pytest.CaptureFixture[str]):
         issue_json = json.dumps({"body": "", "assignees": [], "labels": []})
         gh_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=issue_json, stderr="")
@@ -1048,6 +1088,30 @@ class TestDevelopSkipValidation:
 
         captured = capfd.readouterr()
         assert "Result: FAIL" in captured.out
+
+    def test_develop_proceeds_when_only_dependencies_missing(self):
+        """A failing advisory check does not block development."""
+        checks = [
+            CheckResult(name="Acceptance criteria", passed=True, message="found"),
+            CheckResult(name="Dependencies identified", passed=False, message="not found", advisory=True),
+            CheckResult(name="Assignee confirmed", passed=True, message="dev1"),
+            CheckResult(name="No blocking labels", passed=True, message="none"),
+        ]
+        verification_passed = VerificationResult(passed=True, message="skipped", checks=[])
+        with (
+            patch("askcc.cli.bootstrap_templates"),
+            patch("askcc.cli.validate_issue_labels", return_value=[]),
+            patch("askcc.cli.validate_issue_readiness", return_value=checks),
+            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
+            patch("askcc.cli.get_runner", return_value=_mock_runner()) as mock_get_runner,
+            patch("askcc.cli._run_project_verification", return_value=verification_passed),
+            patch("askcc.cli.transition_issue_to_review"),
+            patch("sys.argv", ["askcc", "develop", "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit),
+        ):
+            main()
+
+        mock_get_runner.assert_called_once()
 
     def test_develop_skip_validation_bypasses_check(self):
         """Develop --skip-validation skips readiness validation and runs Claude."""

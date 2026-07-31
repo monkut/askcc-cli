@@ -303,6 +303,7 @@ class CheckResult:
     name: str
     passed: bool
     message: str
+    advisory: bool = False  # reported but never blocks `develop` or the `validate` exit code
 
 
 @dataclass(frozen=True)
@@ -434,13 +435,14 @@ def validate_issue_readiness(github_issue_url: str) -> list[CheckResult]:
         )
     )
 
-    # 2. Dependencies identified
+    # 2. Dependencies identified (advisory — an issue with no dependencies is still development-ready)
     has_deps = _has_dependencies_section(body)
     checks.append(
         CheckResult(
             name="Dependencies identified",
             passed=has_deps,
             message="Dependencies section found" if has_deps else "No dependencies/context section found",
+            advisory=True,
         )
     )
 

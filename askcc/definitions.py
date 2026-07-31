@@ -170,7 +170,8 @@ Keep prose concise; prefer bullet lists over paragraphs.
 Re-read the body and assignees (`gh issue view <url> --json body,assignees`) and confirm \
 (a) `## Acceptance Criteria` heading with a `- [ ]` checklist item, (b) `## Dependencies` (or \
 Prerequisites/Context/Blockers) heading is present, and (c) at least one assignee is set. \
-Re-edit / re-assign and re-verify until all three pass — `develop` rejects the issue otherwise.
+Re-edit / re-assign and re-verify until all three pass — `develop` rejects the issue without \
+(a) or (c); (b) is advisory but still expected in a planned issue.
 
 ## Summary Comment
 

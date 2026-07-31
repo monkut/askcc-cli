@@ -65,7 +65,7 @@ Run `askcc --help` or `askcc COMMAND --help` for the full flag list.
 |------------|--------------------------------------------------------------------------|
 | `prepare`  | Analyze a backlog issue for development readiness (acceptance criteria, dependencies, estimates) |
 | `plan`     | Fetch the issue and run Claude in planning mode (architecture/design)    |
-| `validate` | Check issue readiness for development (acceptance criteria, dependencies, assignee, blocking labels) |
+| `validate` | Check issue readiness for development (acceptance criteria, assignee, blocking labels; dependencies reported as advisory) |
 | `develop`  | Fetch the issue and run Claude in development mode (implementation)      |
 | `issue-review` | Review issue quality (clarity, completeness, feasibility)            |
 | `pr-review` | Review a PR's code against its linked issue's Definition of Done        |
@@ -101,7 +101,7 @@ Supporting commands can be used at any point:
 
 **Gating mechanisms:**
 - `prepare` adds the `action:develop` label; subsequent commands require an `action:` label prefix
-- `develop` runs readiness validation (acceptance criteria, dependencies, assignee, no blocking labels) before starting
+- `develop` runs readiness validation (acceptance criteria, assignee, no blocking labels) before starting; a missing `## Dependencies` section is reported as `WARN` and does not block
 - The `needs:decision` label blocks `develop` until resolved
 - `develop` swaps `action:develop` → `action:review` and moves the project board status on success
 

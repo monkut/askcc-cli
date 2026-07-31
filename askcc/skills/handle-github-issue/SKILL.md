@@ -37,7 +37,7 @@ Run these steps **before** adopting the agent persona below.
    - Comments: `gh api --paginate repos/<owner>/<repo>/issues/<N>/comments`
    - Combine into a single context block: title, body, then each comment as `Comment by @<login>:\n<body>` separated by `---`.
 4. **Decision-label pre-check** (all agent actions): see **Decision handling** below — if the `needs:decision` label is already present, stop without posting.
-5. **Develop-only readiness gate** (skip with `--skip-validation` if the user says so): run the **`validate`** checks below; if any fail, stop and print the report unless the user explicitly overrides.
+5. **Develop-only readiness gate** (skip with `--skip-validation` if the user says so): run the **`validate`** checks below; if any blocking check fails, stop and print the report unless the user explicitly overrides. Advisory checks never stop development.
 
 ## Action: prepare
 
@@ -86,14 +86,14 @@ Read current body: `gh issue view <url> --json body -q .body`. Append missing se
 
 ## Action: validate
 
-No agent. Run readiness checks and print a structured PASS/FAIL report. Exit non-zero if any fail.
+No agent. Run readiness checks and print a structured report. Exit non-zero if any **blocking** check fails.
 
 Fetch the issue (`gh api repos/<owner>/<repo>/issues/<N>`) and evaluate:
 
-1. **Acceptance criteria** — body contains an `## Acceptance Criteria` (or equivalent) heading **and** at least one `- [ ]` checklist item.
-2. **Dependencies identified** — body contains a `## Dependencies` (or `## Prerequisites` / `## Context` / `## Blockers`) heading.
-3. **Assignee confirmed** — `assignees` is non-empty.
-4. **No blocking labels** — neither `needs:decision` nor `blocked` is present.
+1. **Acceptance criteria** (blocking) — body contains an `## Acceptance Criteria` (or equivalent) heading **and** at least one `- [ ]` checklist item.
+2. **Dependencies identified** (advisory) — body contains a `## Dependencies` (or `## Prerequisites` / `## Context` / `## Blockers`) heading. Reported as `WARN` when missing; does not affect the exit code.
+3. **Assignee confirmed** (blocking) — `assignees` is non-empty.
+4. **No blocking labels** (blocking) — neither `needs:decision` nor `blocked` is present.
 
 Print a report like:
 
@@ -101,11 +101,11 @@ Print a report like:
 Validation Report: <url>
 ------------------------------------------------------------
   [PASS] Acceptance criteria: Clear acceptance criteria found
-  [FAIL] Dependencies identified: No dependencies/context section found
+  [WARN] Dependencies identified: No dependencies/context section found
   [PASS] Assignee confirmed: Assigned to: <login>
   [PASS] No blocking labels: No blocking labels found
 ------------------------------------------------------------
-Result: FAIL (3/4 checks passed)
+Result: PASS (3/3 blocking checks passed)
 ```
 
 Used as a gate by `develop` (and on user request).
@@ -150,7 +150,7 @@ Then **do both**:
 
 Apply: `gh issue edit <url> --body "<updated body>"`.
 
-**Post-update verification** (mandatory before transitioning): re-fetch `gh issue view <url> --json body,assignees` and confirm (a) `## Acceptance Criteria` heading with at least one `- [ ]` item, (b) `## Dependencies` (or Prerequisites/Context/Blockers) heading present, (c) at least one assignee. Re-edit and re-verify until all three pass — `develop` rejects the issue otherwise.
+**Post-update verification** (mandatory before transitioning): re-fetch `gh issue view <url> --json body,assignees` and confirm (a) `## Acceptance Criteria` heading with at least one `- [ ]` item, (b) `## Dependencies` (or Prerequisites/Context/Blockers) heading present, (c) at least one assignee. Re-edit and re-verify until all three pass — `develop` rejects the issue without (a) or (c); (b) is advisory but still expected in a planned issue.
 
 **Summary comment** — `gh issue comment <url> --body "<summary>"` describing sections added/updated and any risks or open questions.
 
@@ -599,7 +599,7 @@ See the **Action selection** table at the top of this file for the per-action `M
   → Run **prepare** pre-flight → adopt the prepare persona → update description (Acceptance Criteria, Dependencies as drafts) → post summary comment → add `action:develop` label.
 
 - **"Validate https://github.com/monkut/askcc-cli/issues/1"**
-  → Run the four readiness checks → print the report → exit non-zero on any fail.
+  → Run the four readiness checks → print the report → exit non-zero when a blocking check fails.
 
 - **"Plan https://github.com/monkut/askcc-cli/issues/1"**
   → label-prefix gate → fetch issue + comments → adopt plan persona → rewrite body with Acceptance Criteria / Dependencies / Implementation Plan / Assignee → post-update verification → summary comment → swap `action:plan` → `action:develop`.

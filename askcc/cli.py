@@ -103,18 +103,29 @@ def _resolve_model(cli_value: str | None, frontmatter_value: str | None) -> str 
     return frontmatter_value
 
 
+def _checks_passed(checks: list[CheckResult]) -> bool:
+    """Report whether every blocking check passed. Advisory checks never block."""
+    return all(check.passed for check in checks if not check.advisory)
+
+
+def _check_status(check: CheckResult) -> str:
+    if check.passed:
+        return "PASS"
+    return "WARN" if check.advisory else "FAIL"
+
+
 def _print_validation_report(issue_url: str, checks: list[CheckResult]) -> None:
     """Print a structured pass/fail validation report."""
-    passed_count = sum(1 for c in checks if c.passed)
-    total = len(checks)
+    blocking = [c for c in checks if not c.advisory]
+    passed_count = sum(1 for c in blocking if c.passed)
+    total = len(blocking)
     print(f"Validation Report: {issue_url}")  # noqa: T201
     print("-" * 60)  # noqa: T201
     for check in checks:
-        status = "PASS" if check.passed else "FAIL"
-        print(f"  [{status}] {check.name}: {check.message}")  # noqa: T201
+        print(f"  [{_check_status(check)}] {check.name}: {check.message}")  # noqa: T201
     print("-" * 60)  # noqa: T201
     result = "PASS" if passed_count == total else "FAIL"
-    print(f"Result: {result} ({passed_count}/{total} checks passed)")  # noqa: T201
+    print(f"Result: {result} ({passed_count}/{total} blocking checks passed)")  # noqa: T201
 
 
 def main() -> None:  # noqa: PLR0912, PLR0915, C901
@@ -255,7 +266,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
     if args.command == "validate":
         checks = validate_issue_readiness(args.github_issue_url)
         _print_validation_report(args.github_issue_url, checks)
-        sys.exit(0 if all(c.passed for c in checks) else 1)
+        sys.exit(0 if _checks_passed(checks) else 1)
 
     bootstrap_templates()
 
@@ -270,7 +281,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
 
     if action == AgentAction.DEVELOP and not args.skip_validation:
         checks = validate_issue_readiness(args.github_issue_url)
-        if not all(c.passed for c in checks):
+        if not _checks_passed(checks):
             _print_validation_report(args.github_issue_url, checks)
             logger.error("Issue readiness validation failed. Use --skip-validation to bypass.")
             sys.exit(1)

@@ -1,13 +1,14 @@
 name: Release
 
+# A push to main (a merged PR, from this repo or a fork) runs with the repository's
+# own token. A `pull_request` event from a fork gets a read-only token, so
+# `gh release create` failed with 403 (#125).
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches: [main]
 
 jobs:
   test:
-    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -47,10 +48,12 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
 
+      # Ask the remote: actions/checkout fetches no tags, so a local `git rev-parse`
+      # never found an existing tag and a merge without a version bump failed with 422 (#125).
       - name: Check if tag already exists
         id: check_tag
         run: |
-          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+          if git ls-remote --exit-code --tags origin "refs/tags/${{ steps.version.outputs.tag }}" >/dev/null; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"

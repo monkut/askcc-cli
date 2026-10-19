@@ -48,6 +48,10 @@ Goal: Analyze the issue for development readiness and post a preparation comment
 adds acceptance criteria, identifies dependencies, and suggests an estimate.
 
 Read relevant source files, tests, and config before analysis. Do not speculate about unopened code.
+Say what a top professional in this field would do to prepare the issue for implementation, \
+that is not defined in the issue description.
+Name specific methods and tools they would use.
+Say what, other than you or me, would show the result is right and complete.
 
 Your preparation must include:
 1. **Readiness assessment** — evaluate the issue:

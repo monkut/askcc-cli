@@ -22,17 +22,13 @@ from askcc.definitions import (
 from askcc.functions import (
     CheckResult,
     VerificationResult,
-    _add_issue_label,
     _detect_verification_commands,
     _find_linked_pr_number,
-    _find_option_id,
     _has_acceptance_criteria,
     _has_dependencies_section,
     _parse_issue_url,
     _resolve_transferred_predecessors,
     _run_project_verification,
-    _swap_issue_labels,
-    _transition_project_fields,
     append_usage_to_last_comment,
     bootstrap_templates,
     fetch_pr_content,
@@ -40,9 +36,6 @@ from askcc.functions import (
     load_agent_config,
     load_template,
     parse_frontmatter,
-    transition_issue_to_development,
-    transition_issue_to_planning,
-    transition_issue_to_review,
     validate_issue_readiness,
     validate_template,
     write_prompt_content,
@@ -61,9 +54,6 @@ from askcc.settings import (
     CLAUDE_ENV_MAX_THINKING_TOKENS,
     DEFAULT_EFFORT_LEVEL,
     DEFAULT_MAX_THINKING_TOKENS,
-    PLANNING_STATUS_OPTIONS,
-    READY_STATUS_OPTIONS,
-    REVIEW_STATUS_OPTIONS,
     USER_CONFIG_PATH,
     VALID_EFFORT_LEVELS,
     SupportedLanguage,
@@ -736,7 +726,6 @@ class TestLanguageOption:
         mock_runner = _mock_runner()
         with (
             patch("askcc.cli.bootstrap_templates"),
-            patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
             patch("askcc.cli.get_runner", return_value=mock_runner),
             patch("sys.argv", ["askcc", *extra_args, AgentAction.PLAN, "-g", self.ISSUE_URL]),
@@ -938,7 +927,7 @@ class TestValidateIssueReadiness:
             checks = validate_issue_readiness(self.ISSUE_URL)
 
         assert all(c.passed for c in checks)
-        assert len(checks) == 4
+        assert len(checks) == 3
 
     def test_all_checks_fail(self):
         issue_json = self._make_issue_json(
@@ -955,7 +944,7 @@ class TestValidateIssueReadiness:
             checks = validate_issue_readiness(self.ISSUE_URL)
 
         assert not any(c.passed for c in checks)
-        assert len(checks) == 4
+        assert len(checks) == 3
 
     def test_dependencies_check_is_advisory(self):
         issue_json = self._make_issue_json(
@@ -973,9 +962,10 @@ class TestValidateIssueReadiness:
         deps_check = next(c for c in checks if c.name == "Dependencies identified")
         assert deps_check.passed is False
         assert deps_check.advisory is True
-        assert [c.advisory for c in checks if c.name != "Dependencies identified"] == [False, False, False]
+        assert [c.advisory for c in checks if c.name != "Dependencies identified"] == [False, False]
 
-    def test_blocking_label_detected(self):
+    def test_labels_do_not_affect_readiness(self):
+        """Stop labels are the caller's workflow concern, not a readiness criterion (#128)."""
         issue_json = self._make_issue_json(
             body="## Acceptance Criteria\n- [ ] Item\n\n## Context\nSee docs.\n",
             assignees=[{"login": "dev1"}],
@@ -989,9 +979,8 @@ class TestValidateIssueReadiness:
         ):
             checks = validate_issue_readiness(self.ISSUE_URL)
 
-        blocking_check = next(c for c in checks if c.name == "No blocking labels")
-        assert blocking_check.passed is False
-        assert "needs:decision" in blocking_check.message
+        assert all(c.passed for c in checks)
+        assert not any("label" in c.name.lower() for c in checks)
 
     def test_null_body_handled(self):
         issue_json = json.dumps({"body": None, "assignees": [], "labels": []})
@@ -1003,7 +992,7 @@ class TestValidateIssueReadiness:
         ):
             checks = validate_issue_readiness(self.ISSUE_URL)
 
-        assert len(checks) == 4
+        assert len(checks) == 3
         assert not checks[0].passed  # acceptance criteria
         assert not checks[1].passed  # dependencies
 
@@ -1053,7 +1042,7 @@ class TestValidateCommand:
 
         captured = capfd.readouterr()
         assert "[WARN] Dependencies identified" in captured.out
-        assert "Result: PASS (3/3 blocking checks passed)" in captured.out
+        assert "Result: PASS (2/2 blocking checks passed)" in captured.out
 
     def test_validate_exits_one_on_fail(self, capfd: pytest.CaptureFixture[str]):
         issue_json = json.dumps({"body": "", "assignees": [], "labels": []})
@@ -1081,7 +1070,6 @@ class TestDevelopSkipValidation:
 
         with (
             patch("askcc.cli.bootstrap_templates"),
-            patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
             patch("askcc.functions.subprocess.run", return_value=gh_result),
             patch("sys.argv", ["askcc", "develop", "-g", self.ISSUE_URL]),
@@ -1098,17 +1086,14 @@ class TestDevelopSkipValidation:
             CheckResult(name="Acceptance criteria", passed=True, message="found"),
             CheckResult(name="Dependencies identified", passed=False, message="not found", advisory=True),
             CheckResult(name="Assignee confirmed", passed=True, message="dev1"),
-            CheckResult(name="No blocking labels", passed=True, message="none"),
         ]
         verification_passed = VerificationResult(passed=True, message="skipped", checks=[])
         with (
             patch("askcc.cli.bootstrap_templates"),
-            patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.validate_issue_readiness", return_value=checks),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
             patch("askcc.cli.get_runner", return_value=_mock_runner()) as mock_get_runner,
             patch("askcc.cli._run_project_verification", return_value=verification_passed),
-            patch("askcc.cli.transition_issue_to_review"),
             patch("sys.argv", ["askcc", "develop", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
         ):
@@ -1121,222 +1106,16 @@ class TestDevelopSkipValidation:
         verification_passed = VerificationResult(passed=True, message="skipped", checks=[])
         with (
             patch("askcc.cli.bootstrap_templates"),
-            patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.validate_issue_readiness") as mock_validate,
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
             patch("askcc.cli.get_runner", return_value=_mock_runner()),
             patch("askcc.cli._run_project_verification", return_value=verification_passed),
-            patch("askcc.cli.transition_issue_to_review"),
             patch("sys.argv", ["askcc", "develop", "--skip-validation", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
         ):
             main()
 
         mock_validate.assert_not_called()
-
-
-class TestFindOptionId:
-    def test_finds_matching_option(self):
-        options = [{"id": "opt1", "name": "backlog"}, {"id": "opt2", "name": "in-review"}]
-        assert _find_option_id(options, ("in-review",)) == "opt2"
-
-    def test_case_insensitive(self):
-        options = [{"id": "opt1", "name": "In-Review"}]
-        assert _find_option_id(options, ("in-review",)) == "opt1"
-
-    def test_returns_first_match(self):
-        options = [
-            {"id": "opt1", "name": "planned"},
-            {"id": "opt2", "name": "in-review"},
-        ]
-        assert _find_option_id(options, ("in-review", "planned")) == "opt1"
-
-
-class TestCanonicalStatusColumns:
-    """Transitions must target columns a board actually has (monkut/askcc-cli#123)."""
-
-    CANONICAL = frozenset({"backlog", "planned", "in-progress", "in-review", "in-client-review", "done"})
-
-    def test_every_transition_targets_a_canonical_column(self):
-        for options in (PLANNING_STATUS_OPTIONS, READY_STATUS_OPTIONS, REVIEW_STATUS_OPTIONS):
-            assert set(options) <= self.CANONICAL, options
-
-    def test_transition_targets(self):
-        assert PLANNING_STATUS_OPTIONS == ("planned",)
-        assert READY_STATUS_OPTIONS == ("planned",)
-        assert REVIEW_STATUS_OPTIONS == ("in-review",)
-
-    def test_no_match_returns_none(self):
-        options = [{"id": "opt1", "name": "Todo"}, {"id": "opt2", "name": "Done"}]
-        assert _find_option_id(options, ("in-review",)) is None
-
-    def test_empty_options(self):
-        assert _find_option_id([], ("in-review",)) is None
-
-
-class TestSwapIssueLabels:
-    def test_success(self, caplog: pytest.LogCaptureFixture):
-        ok = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
-        with (
-            caplog.at_level("INFO", logger="askcc.functions"),
-            patch("askcc.functions.subprocess.run", return_value=ok) as mock_run,
-        ):
-            _swap_issue_labels("/usr/bin/gh", "owner/repo", 42, remove="action:develop", add="action:review")
-
-        assert mock_run.call_count == 2
-        add_cmd = mock_run.call_args_list[0][0][0]
-        remove_cmd = mock_run.call_args_list[1][0][0]
-        assert "--add-label" in add_cmd
-        assert "--remove-label" not in add_cmd
-        assert "--remove-label" in remove_cmd
-        assert "--add-label" not in remove_cmd
-        assert "Transitioned labels" in caplog.text
-
-    def test_add_failure_skips_remove(self, caplog: pytest.LogCaptureFixture):
-        with (
-            caplog.at_level("WARNING", logger="askcc.functions"),
-            patch(
-                "askcc.functions.subprocess.run",
-                side_effect=subprocess.CalledProcessError(1, "gh", stderr="label not found"),
-            ) as mock_run,
-        ):
-            _swap_issue_labels("/usr/bin/gh", "owner/repo", 42, remove="action:develop", add="action:review")
-
-        mock_run.assert_called_once()  # only the add call, remove never attempted
-        assert "Failed to add label" in caplog.text
-
-    def test_remove_failure_warns(self, caplog: pytest.LogCaptureFixture):
-        ok = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
-        with (
-            caplog.at_level("WARNING", logger="askcc.functions"),
-            patch(
-                "askcc.functions.subprocess.run",
-                side_effect=[ok, subprocess.CalledProcessError(1, "gh", stderr="label not found")],
-            ) as mock_run,
-        ):
-            _swap_issue_labels("/usr/bin/gh", "owner/repo", 42, remove="action:develop", add="action:review")
-
-        assert mock_run.call_count == 2
-        assert "Failed to remove label" in caplog.text
-
-
-class TestTransitionProjectFields:
-    def _graphql_response(self, nodes: list[dict]) -> str:
-        return json.dumps({"data": {"repository": {"issue": {"projectItems": {"nodes": nodes}}}}})
-
-    def test_no_project_items(self, caplog: pytest.LogCaptureFixture):
-        result = subprocess.CompletedProcess(args=[], returncode=0, stdout=self._graphql_response([]), stderr="")
-        with (
-            caplog.at_level("INFO", logger="askcc.functions"),
-            patch("askcc.functions.subprocess.run", return_value=result),
-        ):
-            _transition_project_fields("/usr/bin/gh", "owner", "repo", 42)
-
-        assert "not in any project" in caplog.text
-
-    def test_updates_status_field(self, caplog: pytest.LogCaptureFixture):
-        nodes = [
-            {
-                "id": "item-1",
-                "project": {
-                    "id": "proj-1",
-                    "title": "My Board",
-                    "statusField": {
-                        "id": "field-status",
-                        "options": [
-                            {"id": "opt-todo", "name": "Todo"},
-                            {"id": "opt-review", "name": "in-review"},
-                        ],
-                    },
-                },
-            }
-        ]
-        query_result = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout=self._graphql_response(nodes), stderr=""
-        )
-        mutation_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="{}", stderr="")
-
-        with (
-            caplog.at_level("INFO", logger="askcc.functions"),
-            patch("askcc.functions.subprocess.run", side_effect=[query_result, mutation_result]),
-        ):
-            _transition_project_fields("/usr/bin/gh", "owner", "repo", 42)
-
-        assert "Updated 'Status' in project 'My Board'" in caplog.text
-
-    def test_skips_missing_fields(self, caplog: pytest.LogCaptureFixture):
-        nodes = [
-            {
-                "id": "item-1",
-                "project": {
-                    "id": "proj-1",
-                    "title": "Simple Board",
-                    "statusField": None,
-                },
-            }
-        ]
-        query_result = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout=self._graphql_response(nodes), stderr=""
-        )
-        with (
-            caplog.at_level("INFO", logger="askcc.functions"),
-            patch("askcc.functions.subprocess.run", return_value=query_result) as mock_run,
-        ):
-            _transition_project_fields("/usr/bin/gh", "owner", "repo", 42)
-
-        # Only the query call, no mutation calls
-        mock_run.assert_called_once()
-
-    def test_skips_unmatched_status_options(self):
-        nodes = [
-            {
-                "id": "item-1",
-                "project": {
-                    "id": "proj-1",
-                    "title": "Board",
-                    "statusField": {
-                        "id": "field-status",
-                        "options": [{"id": "opt-todo", "name": "Todo"}, {"id": "opt-done", "name": "Done"}],
-                    },
-                },
-            }
-        ]
-        query_result = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout=self._graphql_response(nodes), stderr=""
-        )
-        with patch("askcc.functions.subprocess.run", return_value=query_result) as mock_run:
-            _transition_project_fields("/usr/bin/gh", "owner", "repo", 42)
-
-        mock_run.assert_called_once()
-
-    def test_query_failure_warns(self, caplog: pytest.LogCaptureFixture):
-        with (
-            caplog.at_level("WARNING", logger="askcc.functions"),
-            patch(
-                "askcc.functions.subprocess.run",
-                side_effect=subprocess.CalledProcessError(1, "gh", stderr="graphql error"),
-            ),
-        ):
-            _transition_project_fields("/usr/bin/gh", "owner", "repo", 42)
-
-        assert "Failed to query project items" in caplog.text
-
-
-class TestTransitionIssueToReview:
-    ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/42"
-
-    def test_calls_label_swap_and_project_transition(self):
-        with (
-            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
-            patch("askcc.functions._swap_issue_labels") as mock_swap,
-            patch("askcc.functions._transition_project_fields") as mock_project,
-        ):
-            transition_issue_to_review(self.ISSUE_URL)
-
-        mock_swap.assert_called_once_with(
-            "/usr/bin/gh", "monkut/askcc-cli", 42, remove="action:develop", add="action:review"
-        )
-        mock_project.assert_called_once_with("/usr/bin/gh", "monkut", "askcc-cli", 42)
 
 
 _VERIFICATION_PASSED = VerificationResult(passed=True, message="3/3 checks passed", checks=[])
@@ -1350,69 +1129,54 @@ _VERIFICATION_FAILED = VerificationResult(
 )
 
 
-class TestDevelopTransitionIntegration:
+class TestNoWorkflowHandling:
+    """askcc runs the action only; the caller owns labels and board moves (#128)."""
+
     ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/1"
+    WORKFLOW_MARKERS = ("--add-label", "--remove-label", "updateProjectV2ItemFieldValue", "projectItems")
 
-    def test_develop_success_triggers_transition(self):
+    def _run(self, argv: list[str], return_code: int = 0) -> tuple[MagicMock, list[str]]:
+        """Run main() with gh/git stubbed; return the runner and every subprocess command."""
+        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        cli_run = MagicMock(return_value=completed)
+        functions_run = MagicMock(return_value=completed)
+        runner = _mock_runner(return_code)
         with (
             patch("askcc.cli.bootstrap_templates"),
-            patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.validate_issue_readiness", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli.get_runner", return_value=_mock_runner()),
+            patch("askcc.cli.get_runner", return_value=runner),
             patch("askcc.cli._run_project_verification", return_value=_VERIFICATION_PASSED),
-            patch("askcc.cli.transition_issue_to_review") as mock_transition,
-            patch("sys.argv", ["askcc", "develop", "--skip-validation", "-g", self.ISSUE_URL]),
+            patch("askcc.cli.subprocess.run", cli_run),
+            patch("askcc.functions.subprocess.run", functions_run),
+            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
+            patch("sys.argv", ["askcc", *argv]),
             pytest.raises(SystemExit),
         ):
             main()
+        calls = [" ".join(map(str, c.args[0])) for c in (*cli_run.call_args_list, *functions_run.call_args_list)]
+        return runner, calls
 
-        mock_transition.assert_called_once_with(self.ISSUE_URL)
+    def _workflow_writes(self, calls: list[str]) -> list[str]:
+        return [c for c in calls if any(m in c for m in self.WORKFLOW_MARKERS)]
 
-    def test_develop_verification_failure_blocks_transition(self):
-        with (
-            patch("askcc.cli.bootstrap_templates"),
-            patch("askcc.cli.validate_issue_labels", return_value=[]),
-            patch("askcc.cli.validate_issue_readiness", return_value=[]),
-            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli.get_runner", return_value=_mock_runner()),
-            patch("askcc.cli._run_project_verification", return_value=_VERIFICATION_FAILED),
-            patch("askcc.cli.transition_issue_to_review") as mock_transition,
-            patch("sys.argv", ["askcc", "develop", "--skip-validation", "-g", self.ISSUE_URL]),
-            pytest.raises(SystemExit),
-        ):
-            main()
+    @pytest.mark.parametrize("command", ["prepare", "plan", "develop"])
+    def test_success_makes_no_workflow_write(self, command: str):
+        _, calls = self._run([command, "-g", self.ISSUE_URL])
+        assert self._workflow_writes(calls) == []
 
-        mock_transition.assert_not_called()
+    @pytest.mark.parametrize("command", ["plan", "develop", "diagnose"])
+    def test_runs_without_action_label(self, command: str):
+        """No label check: the agent run is reached on an issue with no labels."""
+        runner, calls = self._run([command, "-g", self.ISSUE_URL])
+        runner.run.assert_called_once()
+        assert not [c for c in calls if "labels" in c]
 
-    def test_develop_failure_skips_transition(self):
-        with (
-            patch("askcc.cli.bootstrap_templates"),
-            patch("askcc.cli.validate_issue_labels", return_value=[]),
-            patch("askcc.cli.validate_issue_readiness", return_value=[]),
-            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli.get_runner", return_value=_mock_runner(1)),
-            patch("askcc.cli.transition_issue_to_review") as mock_transition,
-            patch("sys.argv", ["askcc", "develop", "--skip-validation", "-g", self.ISSUE_URL]),
-            pytest.raises(SystemExit),
-        ):
-            main()
-
-        mock_transition.assert_not_called()
-
-    def test_plan_success_skips_transition(self):
-        with (
-            patch("askcc.cli.bootstrap_templates"),
-            patch("askcc.cli.validate_issue_labels", return_value=[]),
-            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli.get_runner", return_value=_mock_runner()),
-            patch("askcc.cli.transition_issue_to_review") as mock_transition,
-            patch("sys.argv", ["askcc", "plan", "-g", self.ISSUE_URL]),
-            pytest.raises(SystemExit),
-        ):
-            main()
-
-        mock_transition.assert_not_called()
+    def test_ignore_labels_flag_is_accepted_noop(self, caplog: pytest.LogCaptureFixture):
+        runner, calls = self._run(["-i", "plan", "-g", self.ISSUE_URL])
+        runner.run.assert_called_once()
+        assert self._workflow_writes(calls) == []
+        assert "deprecated" in caplog.text
 
 
 class TestDetectVerificationCommands:
@@ -1514,194 +1278,6 @@ class TestLoadPrepareConfig:
         config = load_agent_config(AgentAction.PREPARE)
         assert config.action_name == "prepare"
         assert config.description == "Analyzes a backlog issue for development readiness and suggests improvements"
-
-
-class TestAddIssueLabel:
-    def test_success(self, caplog: pytest.LogCaptureFixture):
-        ok = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
-        with (
-            caplog.at_level("INFO", logger="askcc.functions"),
-            patch("askcc.functions.subprocess.run", return_value=ok) as mock_run,
-        ):
-            _add_issue_label("/usr/bin/gh", "owner/repo", 42, "action:develop")
-
-        mock_run.assert_called_once()
-        cmd = mock_run.call_args[0][0]
-        assert "--add-label" in cmd
-        assert "action:develop" in cmd
-        assert "Added label" in caplog.text
-
-    def test_failure_warns(self, caplog: pytest.LogCaptureFixture):
-        with (
-            caplog.at_level("WARNING", logger="askcc.functions"),
-            patch(
-                "askcc.functions.subprocess.run",
-                side_effect=subprocess.CalledProcessError(1, "gh", stderr="label not found"),
-            ),
-        ):
-            _add_issue_label("/usr/bin/gh", "owner/repo", 42, "action:develop")
-
-        assert "Failed to add label" in caplog.text
-
-
-class TestTransitionIssueToPlanningIntegration:
-    ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/42"
-
-    def test_calls_add_label_and_project_transition(self):
-        with (
-            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
-            patch("askcc.functions._add_issue_label") as mock_add,
-            patch("askcc.functions._transition_project_fields") as mock_project,
-        ):
-            transition_issue_to_planning(self.ISSUE_URL)
-
-        mock_add.assert_called_once_with("/usr/bin/gh", "monkut/askcc-cli", 42, "action:develop")
-        mock_project.assert_called_once_with(
-            "/usr/bin/gh",
-            "monkut",
-            "askcc-cli",
-            42,
-            status_options=("planned",),
-        )
-
-
-class TestTransitionIssueToDevelopmentIntegration:
-    ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/42"
-
-    def test_calls_swap_labels_and_project_transition(self):
-        with (
-            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
-            patch("askcc.functions._swap_issue_labels") as mock_swap,
-            patch("askcc.functions._transition_project_fields") as mock_project,
-        ):
-            transition_issue_to_development(self.ISSUE_URL)
-
-        mock_swap.assert_called_once_with(
-            "/usr/bin/gh",
-            "monkut/askcc-cli",
-            42,
-            remove="action:plan",
-            add="action:develop",
-        )
-        mock_project.assert_called_once_with(
-            "/usr/bin/gh",
-            "monkut",
-            "askcc-cli",
-            42,
-            status_options=("planned",),
-        )
-
-    def test_handles_no_project_cleanly(self):
-        empty_items = subprocess.CompletedProcess(
-            args=[],
-            returncode=0,
-            stdout=json.dumps({"data": {"repository": {"issue": {"projectItems": {"nodes": []}}}}}),
-            stderr="",
-        )
-        ok = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
-        with (
-            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
-            patch("askcc.functions.subprocess.run", side_effect=[ok, ok, empty_items]),
-        ):
-            transition_issue_to_development(self.ISSUE_URL)
-
-
-class TestPlanCommand:
-    ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/1"
-
-    def test_plan_success_triggers_development_transition(self):
-        with (
-            patch("askcc.cli.bootstrap_templates"),
-            patch("askcc.cli.validate_issue_labels", return_value=[]),
-            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli.get_runner", return_value=_mock_runner()),
-            patch("askcc.cli.transition_issue_to_development") as mock_transition,
-            patch("sys.argv", ["askcc", "plan", "-g", self.ISSUE_URL]),
-            pytest.raises(SystemExit),
-        ):
-            main()
-
-        mock_transition.assert_called_once_with(self.ISSUE_URL)
-
-    def test_plan_success_invokes_project_transition(self):
-        with (
-            patch("askcc.cli.bootstrap_templates"),
-            patch("askcc.cli.validate_issue_labels", return_value=[]),
-            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli.get_runner", return_value=_mock_runner()),
-            patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
-            patch("askcc.functions._swap_issue_labels"),
-            patch("askcc.functions._transition_project_fields") as mock_project,
-            patch("sys.argv", ["askcc", "plan", "-g", self.ISSUE_URL]),
-            pytest.raises(SystemExit),
-        ):
-            main()
-
-        mock_project.assert_called_once_with(
-            "/usr/bin/gh",
-            "monkut",
-            "askcc-cli",
-            1,
-            status_options=("planned",),
-        )
-
-    def test_plan_failure_skips_transition(self):
-        with (
-            patch("askcc.cli.bootstrap_templates"),
-            patch("askcc.cli.validate_issue_labels", return_value=[]),
-            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli.get_runner", return_value=_mock_runner(1)),
-            patch("askcc.cli.transition_issue_to_development") as mock_transition,
-            patch("sys.argv", ["askcc", "plan", "-g", self.ISSUE_URL]),
-            pytest.raises(SystemExit),
-        ):
-            main()
-
-        mock_transition.assert_not_called()
-
-
-class TestPrepareCommand:
-    ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/1"
-
-    def test_prepare_skips_label_validation(self):
-        with (
-            patch("askcc.cli.bootstrap_templates"),
-            patch("askcc.cli.validate_issue_labels") as mock_labels,
-            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli.get_runner", return_value=_mock_runner()),
-            patch("askcc.cli.transition_issue_to_planning"),
-            patch("sys.argv", ["askcc", "prepare", "-g", self.ISSUE_URL]),
-            pytest.raises(SystemExit),
-        ):
-            main()
-
-        mock_labels.assert_not_called()
-
-    def test_prepare_success_triggers_planning_transition(self):
-        with (
-            patch("askcc.cli.bootstrap_templates"),
-            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli.get_runner", return_value=_mock_runner()),
-            patch("askcc.cli.transition_issue_to_planning") as mock_transition,
-            patch("sys.argv", ["askcc", "prepare", "-g", self.ISSUE_URL]),
-            pytest.raises(SystemExit),
-        ):
-            main()
-
-        mock_transition.assert_called_once_with(self.ISSUE_URL)
-
-    def test_prepare_failure_skips_transition(self):
-        with (
-            patch("askcc.cli.bootstrap_templates"),
-            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli.get_runner", return_value=_mock_runner(1)),
-            patch("askcc.cli.transition_issue_to_planning") as mock_transition,
-            patch("sys.argv", ["askcc", "prepare", "-g", self.ISSUE_URL]),
-            pytest.raises(SystemExit),
-        ):
-            main()
-
-        mock_transition.assert_not_called()
 
 
 class TestFindLinkedPrNumber:
@@ -1980,7 +1556,6 @@ class TestReviewprCommand:
         mock_runner = _mock_runner()
         with (
             patch("askcc.cli.bootstrap_templates"),
-            patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
             patch("askcc.cli.fetch_pr_content", return_value="pr diff content") as mock_pr,
             patch("askcc.cli.get_runner", return_value=mock_runner),
@@ -1998,7 +1573,6 @@ class TestReviewprCommand:
         with (
             caplog.at_level("ERROR", logger="askcc.cli"),
             patch("askcc.cli.bootstrap_templates"),
-            patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
             patch("askcc.cli.fetch_pr_content", side_effect=ValueError("No linked pull request found")),
             patch("sys.argv", ["askcc", "pr-review", "-g", self.ISSUE_URL]),
@@ -2007,23 +1581,6 @@ class TestReviewprCommand:
             main()
 
         assert "Failed to build prompt" in caplog.text
-
-    def test_reviewpr_no_transition_on_success(self):
-        with (
-            patch("askcc.cli.bootstrap_templates"),
-            patch("askcc.cli.validate_issue_labels", return_value=[]),
-            patch("askcc.cli.fetch_github_issue", return_value="issue body"),
-            patch("askcc.cli.fetch_pr_content", return_value="pr content"),
-            patch("askcc.cli.get_runner", return_value=_mock_runner()),
-            patch("askcc.cli.transition_issue_to_review") as mock_review,
-            patch("askcc.cli.transition_issue_to_planning") as mock_planning,
-            patch("sys.argv", ["askcc", "pr-review", "-g", self.ISSUE_URL]),
-            pytest.raises(SystemExit),
-        ):
-            main()
-
-        mock_review.assert_not_called()
-        mock_planning.assert_not_called()
 
 
 class TestThinkingSettings:
@@ -2172,7 +1729,6 @@ class TestDefaultLanguageResolution:
         issue_url = "https://github.com/monkut/askcc-cli/issues/1"
         with (
             patch("askcc.cli.bootstrap_templates"),
-            patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
             patch("askcc.cli.get_runner", return_value=mock_runner),
             patch("sys.argv", ["askcc", "--language", "english", AgentAction.PLAN, "-g", issue_url]),
@@ -2192,7 +1748,6 @@ class TestThinkingCLIFlags:
         mock_runner = _mock_runner()
         with (
             patch("askcc.cli.bootstrap_templates"),
-            patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
             patch("askcc.cli.get_runner", return_value=mock_runner),
             patch("sys.argv", ["askcc", *extra_args, "plan", "-g", self.ISSUE_URL]),
@@ -2665,7 +2220,6 @@ class TestMainOAuthExitPath:
         with (
             caplog.at_level("ERROR", logger="askcc.cli"),
             patch("askcc.cli.bootstrap_templates"),
-            patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
             patch("askcc.cli.get_runner", return_value=failing_runner),
             patch("sys.argv", ["askcc", "plan", "-g", self.ISSUE_URL]),
@@ -2818,10 +2372,8 @@ class TestEffortPrecedence:
         )
         with (
             patch("askcc.cli.bootstrap_templates"),
-            patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
             patch("askcc.cli.load_agent_config", return_value=fake_config),
-            patch("askcc.cli.transition_issue_to_development"),
             patch("askcc.cli.get_runner", return_value=mock_runner),
             patch("sys.argv", ["askcc", *args, "plan", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
@@ -2944,10 +2496,8 @@ class TestModelPrecedence:
         )
         with (
             patch("askcc.cli.bootstrap_templates"),
-            patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
             patch("askcc.cli.load_agent_config", return_value=fake_config),
-            patch("askcc.cli.transition_issue_to_development"),
             patch("askcc.cli.get_runner", return_value=mock_runner),
             patch("sys.argv", ["askcc", *args, "plan", "-g", self.ISSUE_URL]),
             pytest.raises(SystemExit),
@@ -2985,7 +2535,6 @@ class TestModelCLIFlags:
         mock_runner = _mock_runner()
         with (
             patch("askcc.cli.bootstrap_templates"),
-            patch("askcc.cli.validate_issue_labels", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
             patch("askcc.cli.get_runner", return_value=mock_runner),
             patch("sys.argv", ["askcc", *extra_args, "plan", "-g", self.ISSUE_URL]),

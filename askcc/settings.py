@@ -11,31 +11,6 @@ logger = logging.getLogger(__name__)
 DEFAULT_LOG_LEVEL = "INFO"
 LOG_LEVEL = os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
 
-DEFAULT_DECISION_ISSUE_LABEL = "needs:decision"
-DECISION_ISSUE_LABEL = os.getenv("DECISION_ISSUE_LABEL", DEFAULT_DECISION_ISSUE_LABEL)
-BLOCKING_LABELS: tuple[str, ...] = (DECISION_ISSUE_LABEL, "blocked")
-
-ENABLE_ISSUE_LABEL_PREFIX_VALIDATION: bool = os.getenv("ENABLE_ISSUE_LABEL_PREFIX_VALIDATION", "true").lower() == "true"
-REQUIRED_ISSUE_LABEL_PREFIXES: tuple[str, ...] = ("action:",)
-
-# Label transition
-PLAN_LABEL = "action:plan"
-DEVELOP_LABEL = "action:develop"
-REVIEW_LABEL = "action:review"
-
-# Project board Status columns — the canonical set is backlog, planned, in-progress,
-# in-review, done (+ optional in-client-review); see weyucou/sops
-# procedures/issue-lifecycle.md § Project Columns.
-
-# Prepare transition (prepared issue is scheduled: backlog -> planned)
-PLANNING_STATUS_OPTIONS: tuple[str, ...] = ("planned",)
-
-# Plan transition (a planned issue stays in planned, ready for development)
-READY_STATUS_OPTIONS: tuple[str, ...] = ("planned",)
-
-# Develop transition (PR opened -> internal review)
-REVIEW_STATUS_OPTIONS: tuple[str, ...] = ("in-review",)
-
 # -- Claude thinking/reasoning controls --
 # NOTE: VALID_EFFORT_LEVELS and SupportedLanguage live here (not definitions.py) to avoid
 # a circular import; definitions.py already imports from settings.py.
@@ -111,7 +86,7 @@ def _load_user_config(path: Path | None = None) -> dict:
     try:
         with target.open("rb") as f:
             return tomllib.load(f)
-    except (tomllib.TOMLDecodeError, OSError):
+    except tomllib.TOMLDecodeError, OSError:
         # Path is logged; exception detail is intentionally omitted to avoid echoing
         # config contents into logs.
         logger.warning("Failed to read user config %s. Ignoring.", target)

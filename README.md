@@ -65,7 +65,7 @@ Run `askcc --help` or `askcc COMMAND --help` for the full flag list.
 |------------|--------------------------------------------------------------------------|
 | `prepare`  | Analyze a backlog issue for development readiness (acceptance criteria, dependencies, estimates) |
 | `plan`     | Fetch the issue and run Claude in planning mode (architecture/design)    |
-| `validate` | Check issue readiness for development (acceptance criteria, assignee, blocking labels; dependencies reported as advisory) |
+| `validate` | Check issue readiness for development (acceptance criteria, assignee; dependencies reported as advisory) |
 | `develop`  | Fetch the issue and run Claude in development mode (implementation)      |
 | `issue-review` | Review issue quality (clarity, completeness, feasibility)            |
 | `pr-review` | Review a PR's code against its linked issue's Definition of Done        |
@@ -76,7 +76,7 @@ Run `askcc --help` or `askcc COMMAND --help` for the full flag list.
 
 ### Recommended Workflow
 
-askcc commands are designed to run sequentially, where each phase produces artifacts (issue sections, labels, project status) that gate and feed the next:
+askcc commands are designed to run sequentially, where each phase produces artifacts (issue sections, comments, branches, PRs) that feed the next:
 
 ```
 prepare → plan → develop → pr-review
@@ -84,9 +84,9 @@ prepare → plan → develop → pr-review
 
 | Phase | Command | Inputs | Outputs |
 |-------|---------|--------|---------|
-| **Define** | `prepare` | Raw backlog issue | Acceptance criteria, dependencies, estimate; adds `action:develop` label |
+| **Define** | `prepare` | Raw backlog issue | Acceptance criteria, dependencies, estimate |
 | **Plan** | `plan` | Prepared issue with acceptance criteria | Implementation plan, assignee; finalizes issue description |
-| **Build** | `develop` | Planned issue (validated for readiness) | Feature branch, PR linked to issue; swaps label to `action:review` |
+| **Build** | `develop` | Planned issue (validated for readiness) | Feature branch, PR linked to issue |
 | **Verify** | `pr-review` | Issue + linked PR | Definition of Done review, approve or request changes |
 
 Supporting commands can be used at any point:
@@ -99,11 +99,11 @@ Supporting commands can be used at any point:
 | `diagnose` | Any time — root cause analysis for bug reports |
 | `fix-ci` | After `develop` — fix failing CI checks on the PR branch |
 
-**Gating mechanisms:**
-- `prepare` adds the `action:develop` label; subsequent commands require an `action:` label prefix
-- `develop` runs readiness validation (acceptance criteria, assignee, no blocking labels) before starting; a missing `## Dependencies` section is reported as `WARN` and does not block
-- The `needs:decision` label blocks `develop` until resolved
-- `develop` swaps `action:develop` → `action:review` and moves the project board status on success
+**Workflow is the caller's job.** askcc runs one action and writes that action's deliverable. It reads no workflow labels, adds or removes no labels, and moves no project cards. The caller (a human, or a PM agent) decides which action to run, applies stop labels such as `needs:decision`, and moves the issue through its board. When an agent needs a decision, it posts a `## Decision Needed` block in its comment for the caller to act on.
+
+**Readiness gate:** `develop` runs readiness validation (acceptance criteria, assignee) before starting; a missing `## Dependencies` section is reported as `WARN` and does not block. Skip it with `--skip-validation`.
+
+**Upgrading from 0.2.x:** askcc no longer applies `action:*` label swaps, project board moves, or `needs:decision`, and no longer requires an `action:` label (`-i/--ignore-labels` is accepted and ignored). Prompt templates already copied to `~/.askcc/templates/` keep the old label instructions: delete the files there to regenerate them.
 
 ### Options
 
@@ -112,7 +112,6 @@ Global options (before the command):
 | Option | Description |
 |---|---|
 | `--cwd DIR` | Working directory for the `claude` subprocess (default: cwd) |
-| `-i`, `--ignore-labels` | Bypass `action:` label prefix validation |
 | `-l`, `--language` | Output language for agent comments (`english`, `japanese`) |
 | `-r`, `--runner` | Runner to execute the task (default: `claude`) |
 | `--effort` | Claude thinking effort (`low`, `medium`, `high`, `xhigh`, `max`) |
@@ -143,8 +142,6 @@ Command-specific options:
 | `ASKCC_CLAUDE_MAX_THINKING_TOKENS` | Thinking token budget | `21000` |
 | `ASKCC_CLAUDE_DISABLE_THINKING` | Force-disable extended thinking (`1`/`true`) | `false` |
 | `ASKCC_CLAUDE_DISABLE_ADAPTIVE_THINKING` | Disable adaptive reasoning (Opus 4.6, Sonnet 4.6) | `true` |
-| `DECISION_ISSUE_LABEL` | Label an agent applies when a decision is needed | `needs:decision` |
-| `ENABLE_ISSUE_LABEL_PREFIX_VALIDATION` | Toggle `action:` label prefix validation | `true` |
 | `CLAUDE_CODE_OAUTH_TOKEN` | OAuth token forwarded to the `claude` subprocess | (none) |
 | `CLAUDE_OAUTH_TOKEN_FILE` | Path to a file holding the OAuth token (used when `CLAUDE_CODE_OAUTH_TOKEN` is unset) | (none) |
 
@@ -246,7 +243,7 @@ For `effort`, `max_thinking_tokens`, and `model`, askcc resolves the effective v
 
 ### Post-Develop Verification
 
-After the `develop` command completes successfully, askcc can run verification commands (tests, linting, type checks) before transitioning the issue to `action:review`. This is **optional** — if no verification config is found, the transition proceeds without checks.
+After the `develop` command completes successfully, askcc can run verification commands (tests, linting, type checks) and log the result. This is **optional** — if no verification config is found, verification is skipped.
 
 Configure verification commands in either of these files (checked in order):
 
@@ -280,7 +277,7 @@ name = "lint"
 cmd = "npm run lint"
 ```
 
-Each entry requires a `name` (used in log output) and `cmd` (shell command to run). If any command fails, the issue label stays at `action:develop` and the failure details are logged. Each command has a 5-minute timeout.
+Each entry requires a `name` (used in log output) and `cmd` (shell command to run). If any command fails, the failure details are logged. Each command has a 5-minute timeout.
 
 ### Examples
 
@@ -334,7 +331,7 @@ askcc/
     __init__.py          # Package version
     cli.py               # Argparse entry point and command dispatch
     definitions.py       # Agent actions, default prompts, frontmatter parsing
-    functions.py         # GitHub issue/PR fetching, label and project transitions
+    functions.py         # GitHub issue/PR fetching, readiness checks, verification
     runners.py           # Runner registry; spawns the `claude` subprocess
     settings.py          # Configuration, env vars, language/effort resolution
     skills/              # Bundled skills installed by `askcc install`

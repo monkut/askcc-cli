@@ -2,16 +2,9 @@ import textwrap
 from dataclasses import dataclass
 from enum import StrEnum
 
-from askcc.settings import DECISION_ISSUE_LABEL
-
-DECISION_GUIDANCE = f"""\
+DECISION_GUIDANCE = """\
 
 Decision handling:
-- Before starting your analysis, check if the issue already has the `{DECISION_ISSUE_LABEL}` label \
-by running `gh issue view <number> --json labels`. \
-If the label is already present, a decision is pending and no new action can be taken — \
-do NOT post a new comment. Stop immediately.
-
 - When your analysis reveals unresolved ambiguities, competing approaches, or choices that depend on \
 project priorities you cannot determine, include a structured decision block in your comment:
 
@@ -27,10 +20,8 @@ project priorities you cannot determine, include a structured decision block in 
 
 **Decision by:** <issue author or maintainer>
 
-- After posting the comment, check if the repository has a `{DECISION_ISSUE_LABEL}` label \
-by running `gh label list --search "{DECISION_ISSUE_LABEL}"`. \
-If the label exists, apply it to the issue with `gh issue edit <number> --add-label "{DECISION_ISSUE_LABEL}"`. \
-Do not create the label if it does not exist.
+- The caller reads the decision block and routes the issue. Do not add or remove issue labels \
+and do not move project cards.
 """
 
 PREPARE_AGENT_PROMPT = (
@@ -248,10 +239,6 @@ Goal: Implement the planned GitHub issue, open a PR, and link it to the issue.
 
 Branching:
 - If on 'main', create a feature branch `feature/<issue-number>-<short-description>` before changes.
-
-Pre-check:
-- Check for the `{DECISION_ISSUE_LABEL}` label: `gh issue view <number> --json labels`. \
-If present, a decision is pending — stop immediately without commenting.
 
 Implementation:
 - Read the planned implementation in issue comments before coding.

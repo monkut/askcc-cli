@@ -20,15 +20,6 @@ from .definitions import (
     AgentConfig,
 )
 from .settings import (
-    BLOCKING_LABELS,
-    DEVELOP_LABEL,
-    ENABLE_ISSUE_LABEL_PREFIX_VALIDATION,
-    PLAN_LABEL,
-    PLANNING_STATUS_OPTIONS,
-    READY_STATUS_OPTIONS,
-    REQUIRED_ISSUE_LABEL_PREFIXES,
-    REVIEW_LABEL,
-    REVIEW_STATUS_OPTIONS,
     TEMPLATES_DIR,
     VALID_EFFORT_LEVELS,
 )
@@ -271,33 +262,6 @@ def fetch_pr_content(github_issue_url: str) -> str:
     return "\n\n".join(sections)
 
 
-def validate_issue_labels(github_issue_url: str) -> list[str]:
-    """Validate that the issue has at least one label matching each required prefix.
-
-    Returns a list of error messages (empty if all prefixes are satisfied).
-    """
-    if not ENABLE_ISSUE_LABEL_PREFIX_VALIDATION or not REQUIRED_ISSUE_LABEL_PREFIXES:
-        return []
-
-    gh = _require_gh_cli()
-    owner, repo, issue_number = _parse_issue_url(github_issue_url)
-    repo_nwo = f"{owner}/{repo}"
-
-    result = subprocess.run(  # noqa: S603
-        [gh, "api", f"repos/{repo_nwo}/issues/{issue_number}", "--jq", "[.labels[].name]"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    labels: list[str] = json.loads(result.stdout)
-
-    errors = []
-    for prefix in REQUIRED_ISSUE_LABEL_PREFIXES:
-        if not any(label.startswith(prefix) for label in labels):
-            errors.append(f"Missing required label with prefix '{prefix}' (found: {labels})")
-    return errors
-
-
 @dataclass(frozen=True)
 class CheckResult:
     name: str
@@ -333,7 +297,7 @@ def _detect_verification_commands(cwd: Path) -> list[tuple[str, list[str]]]:
             entries = data.get("tool", {}).get("askcc", {}).get("verify", [])
             if entries:
                 return [(e["name"], shlex.split(e["cmd"])) for e in entries if "name" in e and "cmd" in e]
-        except (tomllib.TOMLDecodeError, KeyError):
+        except tomllib.TOMLDecodeError, KeyError:
             logger.warning("Failed to parse [tool.askcc.verify] from %s", pyproject)
 
     askcc_toml = cwd / ".askcc.toml"
@@ -343,7 +307,7 @@ def _detect_verification_commands(cwd: Path) -> list[tuple[str, list[str]]]:
             entries = data.get("verify", [])
             if entries:
                 return [(e["name"], shlex.split(e["cmd"])) for e in entries if "name" in e and "cmd" in e]
-        except (tomllib.TOMLDecodeError, KeyError):
+        except tomllib.TOMLDecodeError, KeyError:
             logger.warning("Failed to parse [[verify]] from %s", askcc_toml)
 
     return []
@@ -455,20 +419,6 @@ def validate_issue_readiness(github_issue_url: str) -> list[CheckResult]:
             name="Assignee confirmed",
             passed=has_assignee,
             message=f"Assigned to: {assignee_names}" if has_assignee else "No assignee",
-        )
-    )
-
-    # 4. No blocking labels
-    label_names = [label["name"] for label in issue.get("labels") or []]
-    blocking_found = [name for name in label_names if name in BLOCKING_LABELS]
-    no_blockers = len(blocking_found) == 0
-    checks.append(
-        CheckResult(
-            name="No blocking labels",
-            passed=no_blockers,
-            message="No blocking labels found"
-            if no_blockers
-            else f"Blocking labels present: {', '.join(blocking_found)}",
         )
     )
 
@@ -613,251 +563,6 @@ def append_usage_to_last_comment(github_issue_url: str, usage: dict) -> None:
         check=True,
     )
     logger.info("Appended token usage to comment %d on issue #%d", comment_id, issue_number)
-
-
-def _swap_issue_labels(gh: str, repo_nwo: str, issue_number: int, *, remove: str, add: str) -> None:
-    """Remove one label and add another on a GitHub issue.
-
-    Adds the new label first, then removes the old one only on success.
-    This prevents the issue from being left with no label if the target label doesn't exist.
-    """
-    try:
-        subprocess.run(  # noqa: S603
-            [gh, "issue", "edit", str(issue_number), "-R", repo_nwo, "--add-label", add],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-    except subprocess.CalledProcessError as exc:
-        logger.warning("Failed to add label '%s' on issue #%d: %s", add, issue_number, exc.stderr)
-        return
-    try:
-        subprocess.run(  # noqa: S603
-            [gh, "issue", "edit", str(issue_number), "-R", repo_nwo, "--remove-label", remove],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-    except subprocess.CalledProcessError as exc:
-        logger.warning("Failed to remove label '%s' on issue #%d: %s", remove, issue_number, exc.stderr)
-        return
-    logger.info("Transitioned labels: -%s +%s on issue #%d", remove, add, issue_number)
-
-
-def _find_option_id(options: list[dict], target_names: tuple[str, ...]) -> str | None:
-    """Find the first matching option ID from a list of single-select options (case-insensitive)."""
-    lower_targets = {n.lower() for n in target_names}
-    for option in options:
-        if option.get("name", "").lower() in lower_targets:
-            return option["id"]
-    return None
-
-
-_PROJECT_ITEMS_QUERY = """
-query($owner: String!, $repo: String!, $number: Int!) {
-  repository(owner: $owner, name: $repo) {
-    issue(number: $number) {
-      projectItems(first: 10) {
-        nodes {
-          id
-          project {
-            id
-            title
-            statusField: field(name: "Status") {
-              ... on ProjectV2SingleSelectField {
-                id
-                options { id name }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-"""
-
-_UPDATE_FIELD_MUTATION = """
-mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
-  updateProjectV2ItemFieldValue(input: {
-    projectId: $projectId,
-    itemId: $itemId,
-    fieldId: $fieldId,
-    value: { singleSelectOptionId: $optionId }
-  }) {
-    projectV2Item { id }
-  }
-}
-"""
-
-
-def _update_project_field(
-    gh: str,
-    project_id: str,
-    item_id: str,
-    field_id: str,
-    option_id: str,
-    *,
-    issue_number: int,
-    project_title: str,
-    field_name: str,
-) -> None:
-    """Update a single-select field on a project item. Warns on failure."""
-    try:
-        subprocess.run(  # noqa: S603
-            [
-                gh,
-                "api",
-                "graphql",
-                "-f",
-                f"query={_UPDATE_FIELD_MUTATION}",
-                "-F",
-                f"projectId={project_id}",
-                "-F",
-                f"itemId={item_id}",
-                "-F",
-                f"fieldId={field_id}",
-                "-F",
-                f"optionId={option_id}",
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        logger.info("Updated '%s' in project '%s' for issue #%d", field_name, project_title, issue_number)
-    except subprocess.CalledProcessError as exc:
-        logger.warning(
-            "Failed to update '%s' in project '%s' for issue #%d: %s",
-            field_name,
-            project_title,
-            issue_number,
-            exc.stderr,
-        )
-
-
-def _transition_project_fields(
-    gh: str,
-    owner: str,
-    repo: str,
-    issue_number: int,
-    *,
-    status_options: tuple[str, ...] = REVIEW_STATUS_OPTIONS,
-) -> None:
-    """Move issue to a target status in project boards. Best-effort, warns on failure."""
-    try:
-        result = subprocess.run(  # noqa: S603
-            [
-                gh,
-                "api",
-                "graphql",
-                "-f",
-                f"query={_PROJECT_ITEMS_QUERY}",
-                "-F",
-                f"owner={owner}",
-                "-F",
-                f"repo={repo}",
-                "-F",
-                f"number={issue_number}",
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-    except subprocess.CalledProcessError as exc:
-        logger.warning("Failed to query project items for issue #%d: %s", issue_number, exc.stderr)
-        return
-
-    data = json.loads(result.stdout)
-    items = data.get("data", {}).get("repository", {}).get("issue", {}).get("projectItems", {}).get("nodes") or []
-
-    if not items:
-        logger.info("Issue #%d is not in any project, skipping project transitions", issue_number)
-        return
-
-    for item in items:
-        project = item.get("project", {})
-        project_id = project.get("id")
-        item_id = item.get("id")
-        project_title = project.get("title", "unknown")
-
-        # Update Status field
-        status_field = project.get("statusField")
-        if status_field and status_field.get("options"):
-            option_id = _find_option_id(status_field["options"], status_options)
-            if option_id:
-                _update_project_field(
-                    gh,
-                    project_id,
-                    item_id,
-                    status_field["id"],
-                    option_id,
-                    issue_number=issue_number,
-                    project_title=project_title,
-                    field_name="Status",
-                )
-
-
-def _add_issue_label(gh: str, repo_nwo: str, issue_number: int, label: str) -> None:
-    """Add a label to a GitHub issue. Warns on failure."""
-    try:
-        subprocess.run(  # noqa: S603
-            [gh, "issue", "edit", str(issue_number), "-R", repo_nwo, "--add-label", label],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        logger.info("Added label '%s' to issue #%d", label, issue_number)
-    except subprocess.CalledProcessError as exc:
-        logger.warning("Failed to add label '%s' to issue #%d: %s", label, issue_number, exc.stderr)
-
-
-def transition_issue_to_planning(github_issue_url: str) -> None:
-    """Transition issue to planning state after successful preparation.
-
-    Adds action:develop label and moves to the planned column.
-    All failures are logged as warnings, never raised.
-    """
-    gh = _require_gh_cli()
-    owner, repo, issue_number = _parse_issue_url(github_issue_url)
-    repo_nwo = f"{owner}/{repo}"
-
-    _add_issue_label(gh, repo_nwo, issue_number, DEVELOP_LABEL)
-    _transition_project_fields(
-        gh,
-        owner,
-        repo,
-        issue_number,
-        status_options=PLANNING_STATUS_OPTIONS,
-    )
-
-
-def transition_issue_to_development(github_issue_url: str) -> None:
-    """Transition issue labels and project state after successful planning.
-
-    Swaps action:plan -> action:develop and keeps/moves project status to planned.
-    If action:plan is not present, action:develop is still added (the remove
-    step warns but does not raise).
-    All failures are logged as warnings, never raised.
-    """
-    gh = _require_gh_cli()
-    owner, repo, issue_number = _parse_issue_url(github_issue_url)
-    repo_nwo = f"{owner}/{repo}"
-
-    _swap_issue_labels(gh, repo_nwo, issue_number, remove=PLAN_LABEL, add=DEVELOP_LABEL)
-    _transition_project_fields(gh, owner, repo, issue_number, status_options=READY_STATUS_OPTIONS)
-
-
-def transition_issue_to_review(github_issue_url: str) -> None:
-    """Transition issue labels and project state after successful PR creation.
-
-    All failures are logged as warnings, never raised.
-    """
-    gh = _require_gh_cli()
-    owner, repo, issue_number = _parse_issue_url(github_issue_url)
-    repo_nwo = f"{owner}/{repo}"
-
-    _swap_issue_labels(gh, repo_nwo, issue_number, remove=DEVELOP_LABEL, add=REVIEW_LABEL)
-    _transition_project_fields(gh, owner, repo, issue_number)
 
 
 def write_prompt_content(

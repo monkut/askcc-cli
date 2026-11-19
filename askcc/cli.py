@@ -19,10 +19,6 @@ from .functions import (
     fetch_pr_content,
     install_skills,
     load_agent_config,
-    transition_issue_to_development,
-    transition_issue_to_planning,
-    transition_issue_to_review,
-    validate_issue_labels,
     validate_issue_readiness,
     write_prompt_content,
 )
@@ -148,7 +144,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
         "--ignore-labels",
         action="store_true",
         default=False,
-        help="Bypass issue label verification.",
+        help=argparse.SUPPRESS,  # deprecated no-op: askcc no longer checks labels (#128)
     )
     parser.add_argument(
         "-l",
@@ -270,12 +266,8 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
 
     bootstrap_templates()
 
-    if not args.ignore_labels and args.command != "prepare" and args.github_issue_url is not None:
-        label_errors = validate_issue_labels(args.github_issue_url)
-        if label_errors:
-            for error in label_errors:
-                logger.error(error)
-            sys.exit(1)
+    if args.ignore_labels:
+        logger.warning("-i/--ignore-labels is deprecated and has no effect: askcc no longer checks labels (#128)")
 
     action = AgentAction(args.command)
 
@@ -379,16 +371,11 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
         elif wt_result.stdout.strip():
             logger.debug("[%s] Git worktrees:\n%s", issue_url, wt_result.stdout.strip())
 
-    if action == AgentAction.PREPARE and return_code == 0:
-        transition_issue_to_planning(issue_url)
-
-    if action == AgentAction.PLAN and return_code == 0:
-        transition_issue_to_development(issue_url)
-
+    # Workflow transitions (labels, project board) belong to the caller (#128).
     if action == AgentAction.DEVELOP and return_code == 0:
         verify_result = _run_project_verification(cwd)
         if verify_result.passed:
-            transition_issue_to_review(issue_url)
+            logger.info("Post-develop verification passed: %s", verify_result.message)
         else:
             logger.warning("Post-develop verification failed: %s", verify_result.message)
             for check in verify_result.checks:

@@ -689,6 +689,12 @@ class AgentConfig:
 
 # Allowed values for frontmatter enum fields (validated at load time).
 VALID_FRONTMATTER_MODELS: tuple[str, ...] = ("opus", "sonnet", "haiku", "inherit")
+
+# Exit code of `askcc develop` when post-develop verification fails (#128).
+VERIFICATION_FAILED_EXIT_CODE = 2
+
+# Label-workflow instructions that pre-0.3.0 templates carried; askcc no longer manages labels (#128).
+WORKFLOW_LABEL_MARKERS: tuple[str, ...] = ("--add-label", "--remove-label", "needs:decision")
 # Frontmatter keys recognized by the parser. Unknown keys are warned and ignored.
 KNOWN_FRONTMATTER_KEYS: frozenset[str] = frozenset(
     {"name", "description", "tools", "disallowed_tools", "model", "effort", "max_thinking_tokens", "max_turns"}

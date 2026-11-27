@@ -16,6 +16,8 @@ from askcc.definitions import (
     FIXCI_AGENT_PROMPT,
     REVIEWPR_AGENT_PROMPT,
     VALID_FRONTMATTER_MODELS,
+    VERIFICATION_FAILED_EXIT_CODE,
+    WORKFLOW_LABEL_MARKERS,
     AgentAction,
     AgentConfig,
 )
@@ -170,6 +172,29 @@ class TestLoadTemplate:
 
         result = load_template("PLAN_SYSTEM_PROMPT.md", "fallback")
         assert result == custom_text
+
+    def test_warns_on_stale_label_instructions(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ):
+        """Pre-0.3.0 templates still carry label instructions; loading one warns (#128)."""
+        templates_dir = tmp_path / "templates"
+        templates_dir.mkdir(parents=True)
+        monkeypatch.setattr("askcc.functions.TEMPLATES_DIR", templates_dir)
+        (templates_dir / "PLAN_SYSTEM_PROMPT.md").write_text("Then run `gh issue edit --add-label needs:decision`.")
+
+        load_template("PLAN_SYSTEM_PROMPT.md", "fallback")
+        assert "--add-label, needs:decision" in caplog.text
+
+    def test_no_warning_on_clean_template(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ):
+        templates_dir = tmp_path / "templates"
+        templates_dir.mkdir(parents=True)
+        monkeypatch.setattr("askcc.functions.TEMPLATES_DIR", templates_dir)
+        (templates_dir / "PLAN_SYSTEM_PROMPT.md").write_text("My custom system prompt")
+
+        load_template("PLAN_SYSTEM_PROMPT.md", "fallback")
+        assert "label-workflow" not in caplog.text
 
     def test_falls_back_on_missing_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         templates_dir = tmp_path / "templates"
@@ -1135,8 +1160,10 @@ class TestNoWorkflowHandling:
     ISSUE_URL = "https://github.com/monkut/askcc-cli/issues/1"
     WORKFLOW_MARKERS = ("--add-label", "--remove-label", "updateProjectV2ItemFieldValue", "projectItems")
 
-    def _run(self, argv: list[str], return_code: int = 0) -> tuple[MagicMock, list[str]]:
-        """Run main() with gh/git stubbed; return the runner and every subprocess command."""
+    def _run(
+        self, argv: list[str], return_code: int = 0, verification: VerificationResult = _VERIFICATION_PASSED
+    ) -> tuple[MagicMock, list[str], int]:
+        """Run main() with gh/git stubbed; return the runner, every subprocess command, and the exit code."""
         completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
         cli_run = MagicMock(return_value=completed)
         functions_run = MagicMock(return_value=completed)
@@ -1146,37 +1173,64 @@ class TestNoWorkflowHandling:
             patch("askcc.cli.validate_issue_readiness", return_value=[]),
             patch("askcc.cli.fetch_github_issue", return_value="issue body"),
             patch("askcc.cli.get_runner", return_value=runner),
-            patch("askcc.cli._run_project_verification", return_value=_VERIFICATION_PASSED),
+            patch("askcc.cli._run_project_verification", return_value=verification),
             patch("askcc.cli.subprocess.run", cli_run),
             patch("askcc.functions.subprocess.run", functions_run),
             patch("askcc.functions.shutil.which", return_value="/usr/bin/gh"),
             patch("sys.argv", ["askcc", *argv]),
-            pytest.raises(SystemExit),
+            pytest.raises(SystemExit) as exc_info,
         ):
             main()
         calls = [" ".join(map(str, c.args[0])) for c in (*cli_run.call_args_list, *functions_run.call_args_list)]
-        return runner, calls
+        return runner, calls, exc_info.value.code
 
     def _workflow_writes(self, calls: list[str]) -> list[str]:
         return [c for c in calls if any(m in c for m in self.WORKFLOW_MARKERS)]
 
     @pytest.mark.parametrize("command", ["prepare", "plan", "develop"])
     def test_success_makes_no_workflow_write(self, command: str):
-        _, calls = self._run([command, "-g", self.ISSUE_URL])
+        _, calls, _ = self._run([command, "-g", self.ISSUE_URL])
         assert self._workflow_writes(calls) == []
 
     @pytest.mark.parametrize("command", ["plan", "develop", "diagnose"])
     def test_runs_without_action_label(self, command: str):
         """No label check: the agent run is reached on an issue with no labels."""
-        runner, calls = self._run([command, "-g", self.ISSUE_URL])
+        runner, calls, _ = self._run([command, "-g", self.ISSUE_URL])
         runner.run.assert_called_once()
         assert not [c for c in calls if "labels" in c]
 
     def test_ignore_labels_flag_is_accepted_noop(self, caplog: pytest.LogCaptureFixture):
-        runner, calls = self._run(["-i", "plan", "-g", self.ISSUE_URL])
+        runner, calls, _ = self._run(["-i", "plan", "-g", self.ISSUE_URL])
         runner.run.assert_called_once()
         assert self._workflow_writes(calls) == []
         assert "deprecated" in caplog.text
+
+    def test_ignore_labels_flag_warns_on_validate(self, caplog: pytest.LogCaptureFixture):
+        """Validate exits early; the deprecation warning still shows."""
+        with (
+            patch("askcc.cli.validate_issue_readiness", return_value=[]),
+            patch("sys.argv", ["askcc", "-i", "validate", "-g", self.ISSUE_URL]),
+            pytest.raises(SystemExit),
+        ):
+            main()
+        assert "deprecated" in caplog.text
+
+    def test_develop_exits_zero_when_verification_passes(self):
+        _, _, exit_code = self._run(["develop", "-g", self.ISSUE_URL])
+        assert exit_code == 0
+
+    def test_develop_exits_nonzero_when_verification_fails(self):
+        """The caller owns the workflow, so a failed post-develop check must show in the exit code."""
+        _, calls, exit_code = self._run(["develop", "-g", self.ISSUE_URL], verification=_VERIFICATION_FAILED)
+        assert exit_code == VERIFICATION_FAILED_EXIT_CODE
+        assert self._workflow_writes(calls) == []
+
+    @pytest.mark.parametrize("action", list(AGENT_CONFIGS))
+    def test_default_prompts_carry_no_label_instructions(self, action: AgentAction):
+        """Agent prompts are what edit labels, so none may instruct a label change."""
+        config = AGENT_CONFIGS[action]
+        for prompt in (config.system_prompt, config.user_prompt_template):
+            assert not [m for m in (*WORKFLOW_LABEL_MARKERS, "gh label") if m in prompt]
 
 
 class TestDetectVerificationCommands:

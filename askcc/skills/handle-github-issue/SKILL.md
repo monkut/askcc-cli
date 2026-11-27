@@ -251,7 +251,7 @@ Test plan update:
 
 **Post-run checks**:
 
-- Run **post-develop verification** (see **Common post-flight**) and report the result.
+- Run **post-develop verification** (see **Common post-flight**) and report the result. When any check fails, report the develop run as failed.
 - Also run `git status --porcelain` and `git worktree list --porcelain` to report any leftover state.
 
 ## Action: issue-review

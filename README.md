@@ -103,7 +103,7 @@ Supporting commands can be used at any point:
 
 **Readiness gate:** `develop` runs readiness validation (acceptance criteria, assignee) before starting; a missing `## Dependencies` section is reported as `WARN` and does not block. Skip it with `--skip-validation`.
 
-**Upgrading from 0.2.x:** askcc no longer applies `action:*` label swaps, project board moves, or `needs:decision`, and no longer requires an `action:` label (`-i/--ignore-labels` is accepted and ignored). Prompt templates already copied to `~/.askcc/templates/` keep the old label instructions: delete the files there to regenerate them.
+**Upgrading from 0.2.x:** askcc no longer applies `action:*` label swaps, project board moves, or `needs:decision`, and no longer requires an `action:` label (`-i/--ignore-labels` is accepted and ignored). Prompt templates already copied to `~/.askcc/templates/` keep the old label instructions: askcc logs a warning when it loads one, and deleting the files there regenerates them. The `DECISION_ISSUE_LABEL` and `ENABLE_ISSUE_LABEL_PREFIX_VALIDATION` environment variables are removed and have no effect. `askcc develop` exits with code `2` when post-develop verification fails.
 
 ### Options
 
@@ -243,7 +243,7 @@ For `effort`, `max_thinking_tokens`, and `model`, askcc resolves the effective v
 
 ### Post-Develop Verification
 
-After the `develop` command completes successfully, askcc can run verification commands (tests, linting, type checks) and log the result. This is **optional** — if no verification config is found, verification is skipped.
+After the `develop` command completes successfully, askcc can run verification commands (tests, linting, type checks) and log the result. When any check fails, askcc exits with code `2`. This is **optional** — if no verification config is found, verification is skipped.
 
 Configure verification commands in either of these files (checked in order):
 

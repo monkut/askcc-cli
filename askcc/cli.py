@@ -8,7 +8,7 @@ from pathlib import Path
 from string import Template
 
 from . import __version__, settings
-from .definitions import VALID_FRONTMATTER_MODELS, AgentAction, AgentConfig
+from .definitions import VALID_FRONTMATTER_MODELS, VERIFICATION_FAILED_EXIT_CODE, AgentAction, AgentConfig
 from .functions import (
     CheckResult,
     _parse_issue_url,
@@ -255,6 +255,9 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
 
     args = parser.parse_args()
 
+    if args.ignore_labels:
+        logger.warning("-i/--ignore-labels is deprecated and has no effect: askcc no longer checks labels (#128)")
+
     if args.command == "install":
         install_skills(directory=args.directory)
         return
@@ -265,9 +268,6 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
         sys.exit(0 if _checks_passed(checks) else 1)
 
     bootstrap_templates()
-
-    if args.ignore_labels:
-        logger.warning("-i/--ignore-labels is deprecated and has no effect: askcc no longer checks labels (#128)")
 
     action = AgentAction(args.command)
 
@@ -381,6 +381,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915, C901
             for check in verify_result.checks:
                 status = "PASS" if check.passed else "FAIL"
                 logger.warning("  [%s] %s: %s", status, check.name, check.message)
+            return_code = VERIFICATION_FAILED_EXIT_CODE
 
     sys.exit(return_code)
 

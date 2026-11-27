@@ -16,6 +16,7 @@ from .definitions import (
     AGENT_CONFIGS,
     KNOWN_FRONTMATTER_KEYS,
     VALID_FRONTMATTER_MODELS,
+    WORKFLOW_LABEL_MARKERS,
     AgentAction,
     AgentConfig,
 )
@@ -509,10 +510,19 @@ def load_template(file_name: str, default: str) -> str:
     """Read a template file from TEMPLATES_DIR, falling back to the default on missing file."""
     path = TEMPLATES_DIR / file_name
     try:
-        return path.read_text()
+        text = path.read_text()
     except FileNotFoundError:
         logger.warning("Template file not found: %s — using built-in default", path)
         return default
+    stale_markers = [marker for marker in WORKFLOW_LABEL_MARKERS if marker in text]
+    if stale_markers:
+        logger.warning(
+            "Template %s contains label-workflow instructions (%s) that askcc no longer follows (#128): "
+            "delete the file to regenerate the default",
+            path,
+            ", ".join(stale_markers),
+        )
+    return text
 
 
 def validate_template(template_text: str, required_variables: tuple[str, ...], file_name: str) -> None:

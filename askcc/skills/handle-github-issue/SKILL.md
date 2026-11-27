@@ -1,11 +1,13 @@
 ---
 name: handle-github-issue
-description: Handle a GitHub issue end-to-end inline by adopting the action-specific agent persona for PREPARE, VALIDATE, ISSUE-REVIEW, PR-REVIEW, PLAN, DEVELOP, EXPLORE, DIAGNOSE, or FIX-CI. Fetches issues/PRs, enforces label/readiness gates, posts comments and reviews via `gh`, and transitions labels after success. Use when a user asks to prepare, validate, plan, develop, explore, diagnose, fix CI, review an issue, or review a PR for a GitHub issue.
+description: Handle a GitHub issue end-to-end inline by adopting the action-specific agent persona for PREPARE, VALIDATE, ISSUE-REVIEW, PR-REVIEW, PLAN, DEVELOP, EXPLORE, DIAGNOSE, or FIX-CI. Fetches issues/PRs, enforces the readiness gate, and posts comments and reviews via `gh`. Changes no labels and moves no project cards. Use when a user asks to prepare, validate, plan, develop, explore, diagnose, fix CI, review an issue, or review a PR for a GitHub issue.
 ---
 
 # Handle GitHub Issue
 
-Drives a GitHub issue through its lifecycle natively in Claude Code. Pick the action that matches the user's intent, run the **Common pre-flight**, adopt the embedded agent persona for that action, then run the **Common post-flight** transitions.
+Runs one action on a GitHub issue natively in Claude Code. Pick the action that matches the user's intent, run the **Common pre-flight**, adopt the embedded agent persona for that action, then run the **Common post-flight** checks.
+
+This skill does the action only. It adds or removes no labels and moves no project cards: the caller (a human or a PM agent) owns the issue workflow.
 
 ## Action selection
 
@@ -31,13 +33,11 @@ Inputs every action accepts:
 Run these steps **before** adopting the agent persona below.
 
 1. **Parse the URL**: extract `<owner>`, `<repo>`, `<issue-number>`.
-2. **Label prefix gate** (skip for `prepare` and `validate`): the issue must have at least one label with the `action:` prefix. Check with `gh issue view <url> --json labels`. If missing, stop and report the error.
-3. **Fetch issue content** with `gh`:
+2. **Fetch issue content** with `gh`:
    - Body: `gh api repos/<owner>/<repo>/issues/<N> --jq ".title, .body"`
    - Comments: `gh api --paginate repos/<owner>/<repo>/issues/<N>/comments`
    - Combine into a single context block: title, body, then each comment as `Comment by @<login>:\n<body>` separated by `---`.
-4. **Decision-label pre-check** (all agent actions): see **Decision handling** below — if the `needs:decision` label is already present, stop without posting.
-5. **Develop-only readiness gate** (skip with `--skip-validation` if the user says so): run the **`validate`** checks below; if any blocking check fails, stop and print the report unless the user explicitly overrides. Advisory checks never stop development.
+3. **Develop-only readiness gate** (skip with `--skip-validation` if the user says so): run the **`validate`** checks below; if any blocking check fails, stop and print the report unless the user explicitly overrides. Advisory checks never stop development.
 
 ## Action: prepare
 
@@ -82,8 +82,6 @@ Read current body: `gh issue view <url> --json body -q .body`. Append missing se
 - Estimate suggestion with justification
 - Open questions for the author (if any)
 
-**Post-success transitions** (on agent success): add label `action:develop` via `gh issue edit <url> --add-label "action:develop"`. If a GitHub Project board is configured for the repo, move the item to the `planned` status (see **Common post-flight**).
-
 ## Action: validate
 
 No agent. Run readiness checks and print a structured report. Exit non-zero if any **blocking** check fails.
@@ -93,7 +91,6 @@ Fetch the issue (`gh api repos/<owner>/<repo>/issues/<N>`) and evaluate:
 1. **Acceptance criteria** (blocking) — body contains an `## Acceptance Criteria` (or equivalent) heading **and** at least one `- [ ]` checklist item.
 2. **Dependencies identified** (advisory) — body contains a `## Dependencies` (or `## Prerequisites` / `## Context` / `## Blockers`) heading. Reported as `WARN` when missing; does not affect the exit code.
 3. **Assignee confirmed** (blocking) — `assignees` is non-empty.
-4. **No blocking labels** (blocking) — neither `needs:decision` nor `blocked` is present.
 
 Print a report like:
 
@@ -103,9 +100,8 @@ Validation Report: <url>
   [PASS] Acceptance criteria: Clear acceptance criteria found
   [WARN] Dependencies identified: No dependencies/context section found
   [PASS] Assignee confirmed: Assigned to: <login>
-  [PASS] No blocking labels: No blocking labels found
 ------------------------------------------------------------
-Result: PASS (3/3 blocking checks passed)
+Result: PASS (2/2 blocking checks passed)
 ```
 
 Used as a gate by `develop` (and on user request).
@@ -150,11 +146,9 @@ Then **do both**:
 
 Apply: `gh issue edit <url> --body "<updated body>"`.
 
-**Post-update verification** (mandatory before transitioning): re-fetch `gh issue view <url> --json body,assignees` and confirm (a) `## Acceptance Criteria` heading with at least one `- [ ]` item, (b) `## Dependencies` (or Prerequisites/Context/Blockers) heading present, (c) at least one assignee. Re-edit and re-verify until all three pass — `develop` rejects the issue without (a) or (c); (b) is advisory but still expected in a planned issue.
+**Post-update verification** (mandatory): re-fetch `gh issue view <url> --json body,assignees` and confirm (a) `## Acceptance Criteria` heading with at least one `- [ ]` item, (b) `## Dependencies` (or Prerequisites/Context/Blockers) heading present, (c) at least one assignee. Re-edit and re-verify until all three pass — `develop` rejects the issue without (a) or (c); (b) is advisory but still expected in a planned issue.
 
 **Summary comment** — `gh issue comment <url> --body "<summary>"` describing sections added/updated and any risks or open questions.
-
-**Post-success transitions**: swap label `action:plan` → `action:develop`. Move project status to `planned` (see **Common post-flight**).
 
 ## Action: develop
 
@@ -169,10 +163,6 @@ Goal: Implement the planned GitHub issue, open a PR, and link it to the issue.
 
 Branching:
 - If on 'main', create a feature branch `feature/<issue-number>-<short-description>` before changes.
-
-Pre-check:
-- Check for the `needs:decision` label: `gh issue view <number> --json labels`. If present, a decision is
-  pending — stop immediately without commenting.
 
 Implementation:
 - Read the planned implementation in issue comments before coding.
@@ -259,10 +249,9 @@ Test plan update:
 - Apply: `gh pr edit <number> --body "<updated body>"`. If no `## Test plan` section exists, skip silently.
 ```
 
-**Post-success transitions**:
+**Post-run checks**:
 
-- Run **post-develop verification** (see **Common post-flight**). If verification fails, **stay at `action:develop`** and log the failures — do not transition.
-- If verification passes, swap label `action:develop` → `action:review` and move project status to review (see **Common post-flight**).
+- Run **post-develop verification** (see **Common post-flight**) and report the result. When any check fails, report the develop run as failed.
 - Also run `git status --porcelain` and `git worktree list --porcelain` to report any leftover state.
 
 ## Action: issue-review
@@ -526,8 +515,6 @@ No label transitions.
 
 ## Decision handling (shared by all agent actions)
 
-Before starting analysis, **check** for the `needs:decision` label via `gh issue view <number> --json labels`. If already present, a decision is pending and no new action can be taken — **do not post a new comment**. Stop immediately.
-
 When your analysis reveals unresolved ambiguities, competing approaches, or choices that depend on project priorities you cannot determine, include a structured decision block in your comment:
 
 ```
@@ -544,43 +531,21 @@ When your analysis reveals unresolved ambiguities, competing approaches, or choi
 **Decision by:** <issue author or maintainer>
 ```
 
-After posting the comment, check whether the repository has a `needs:decision` label: `gh label list --search "needs:decision"`. If it exists, apply it: `gh issue edit <number> --add-label "needs:decision"`. **Do not create the label** if it does not exist.
+The caller reads the decision block and routes the issue. Do not add or remove labels.
 
 ## Common post-flight
 
-### Label transitions
-
-| Action | On success |
-|---|---|
-| `prepare` | `gh issue edit <url> --add-label "action:develop"` |
-| `plan` | swap: `--remove-label "action:plan" --add-label "action:develop"` |
-| `develop` | (after verification passes) swap: `--remove-label "action:develop" --add-label "action:review"` |
-
-If swapping and the remove-label is missing, the add still happens — log a warning rather than failing.
-
-### Project board transitions
-
-If the repo uses a GitHub Project board, also move the project item's `Status` field after a successful action:
-
-- After `prepare` → `planned`
-- After `plan` → `planned`
-- After `develop` → `in-review`
-
-These are the canonical columns (`backlog`, `planned`, `in-progress`, `in-review`, `done`, optional `in-client-review`) from weyucou/sops `procedures/issue-lifecycle.md`; match case-insensitively.
-
-Use `gh project item-edit` or the GraphQL API. If the project membership cannot be detected from a single `gh` call, log a warning and skip — never raise.
-
 ### Post-develop verification (develop only)
 
-Run the project's standard test, lint, and type-check commands from the working directory before transitioning. Detect them in this order:
+Run the project's standard test, lint, and type-check commands from the working directory after development. Detect them in this order:
 
 1. `pyproject.toml` — prefer `[tool.poe.tasks]` entries (e.g. `uv run poe test`, `uv run poe check`, `uv run poe typecheck`); otherwise common defaults: `uv run pytest`, `uv run ruff check`, `uv run pyright`.
 2. `Makefile` — targets like `test`, `lint`, `typecheck`.
 3. `package.json` — `npm test`, `npm run lint`, `npm run typecheck` (or the equivalent yarn/pnpm/bun commands).
 
-If no test/lint/typecheck commands can be detected, **skip verification** and transition to `action:review` directly.
+If no test/lint/typecheck commands can be detected, **skip verification** and say so.
 
-If detected, run each command (5-minute timeout each). All must pass to transition. On failure, leave the label at `action:develop` and print:
+If detected, run each command (5-minute timeout each) and print:
 
 ```
 [PASS] tests: passed
@@ -598,16 +563,16 @@ See the **Action selection** table at the top of this file for the per-action `M
 ## Examples
 
 - **"Prepare https://github.com/monkut/askcc-cli/issues/1"**
-  → Run **prepare** pre-flight → adopt the prepare persona → update description (Acceptance Criteria, Dependencies as drafts) → post summary comment → add `action:develop` label.
+  → Run **prepare** pre-flight → adopt the prepare persona → update description (Acceptance Criteria, Dependencies as drafts) → post summary comment.
 
 - **"Validate https://github.com/monkut/askcc-cli/issues/1"**
-  → Run the four readiness checks → print the report → exit non-zero when a blocking check fails.
+  → Run the three readiness checks → print the report → exit non-zero when a blocking check fails.
 
 - **"Plan https://github.com/monkut/askcc-cli/issues/1"**
-  → label-prefix gate → fetch issue + comments → adopt plan persona → rewrite body with Acceptance Criteria / Dependencies / Implementation Plan / Assignee → post-update verification → summary comment → swap `action:plan` → `action:develop`.
+  → fetch issue + comments → adopt plan persona → rewrite body with Acceptance Criteria / Dependencies / Implementation Plan / Assignee → post-update verification → summary comment.
 
 - **"Proceed with development of https://github.com/monkut/askcc-cli/issues/1"**
-  → label-prefix gate → readiness gate (validate) → fetch issue → adopt develop persona → feature branch, RED/GREEN, verification gate, PR opened with `Closes #1`, `## Verification`, `## Key Flows` → on PR open, comment on issue → run post-develop verification commands → swap `action:develop` → `action:review`.
+  → readiness gate (validate) → fetch issue → adopt develop persona → feature branch, RED/GREEN, verification gate, PR opened with `Closes #1`, `## Verification`, `## Key Flows` → on PR open, comment on issue → run post-develop verification commands.
 
 - **"Review issue https://github.com/monkut/askcc-cli/issues/1"**
   → fetch issue → adopt issue-review persona → post comment with verdict.
